@@ -1,0 +1,60 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Build and runtime output
+build/
+dist/
+*.egg-info/
+logs/
+*.log
+.tmp_upload_test/
+docs/.edge-*/
+docs/images/chat-mobile-preview.png
+resume_tmp.pdf
+
+# Local scratch folders created by ad-hoc connectivity checks
+knowledge/test/import/**/example.jpg
+
+# Legacy one-off integration experiments (may contain machine-specific paths)
+knowledge/test/import/
+
+# Imported documents, MinerU output and local model artifacts
+knowledge/processor/import_process/import_temp_Dir/
+models/
+checkpoints/
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+
+# Local databases / vector indexes
+*.db
+*.sqlite
+*.sqlite3
+*.milvus

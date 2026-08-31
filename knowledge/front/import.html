@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080b14">
+  <meta name="description" content="Shopkeeper Brain 知识导入工作台。">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <title>知识导入 · Shopkeeper Brain</title>
+  <link rel="stylesheet" href="ui.css" onerror="if(!this.dataset.fallback){this.dataset.fallback='1';this.href='/front/ui.css'}">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar" aria-label="主导航">
+      <div class="brand-lockup">
+        <div class="brand-mark" aria-hidden="true">智</div>
+        <div class="brand-copy">
+          <div class="brand-name">Shopkeeper Brain</div>
+          <div class="brand-caption">店小智 · HYBRID RAG STUDIO</div>
+        </div>
+      </div>
+
+      <button class="new-chat" id="goChat" type="button">
+        <span class="plus" aria-hidden="true">＋</span><span>新建对话</span>
+      </button>
+
+      <div class="side-section-label">Workspace</div>
+      <nav class="side-nav">
+        <a href="chat.html">
+          <span class="nav-icon" aria-hidden="true">◇</span><span>智能问答</span><span class="nav-badge">RAG</span>
+        </a>
+        <a class="active" href="import.html" aria-current="page">
+          <span class="nav-icon" aria-hidden="true">⇧</span><span>知识导入</span><span class="nav-badge">PDF / MD</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-spacer"></div>
+      <section class="system-card" aria-label="导入管线状态">
+        <div class="system-card-head"><span>导入管线</span><span class="online-dot" aria-label="就绪"></span></div>
+        <div class="system-caption">文档将依次完成解析、切分、向量化与知识图谱构建。</div>
+        <div class="system-metrics">
+          <div class="metric"><span class="metric-value">8</span><span class="metric-label">PDF 节点</span></div>
+          <div class="metric"><span class="metric-value">7</span><span class="metric-label">MD 节点</span></div>
+        </div>
+      </section>
+      <div class="side-footer">MinerU · BGE-M3 · Milvus<br>Neo4j Knowledge Graph</div>
+    </aside>
+
+    <main class="main-panel">
+      <header class="topbar">
+        <button class="mobile-menu" id="mobileMenu" type="button" aria-label="打开导航">☰</button>
+        <div class="breadcrumb"><span>Shopkeeper Brain</span><span class="breadcrumb-sep">/</span><strong>知识导入</strong></div>
+        <div class="top-actions">
+          <div class="status-chip"><span class="online-dot"></span><span>管线就绪</span></div>
+          <a class="outline-btn" href="chat.html" style="text-decoration:none">开始提问 ↗</a>
+        </div>
+      </header>
+
+      <div class="import-main">
+        <div class="import-content">
+          <section class="page-heading">
+            <div>
+              <div class="eyebrow">Knowledge Ingestion Pipeline</div>
+              <h1>让每一份文档，都成为<br>可检索的知识资产。</h1>
+              <p>上传产品手册或 Markdown 文档，店小智会自动完成内容解析、智能切分、向量入库和知识图谱构建。</p>
+            </div>
+            <div class="heading-side-note"><span class="online-dot"></span>支持批量上传与实时进度</div>
+          </section>
+
+          <section class="drop-zone" id="dropZone" tabindex="0" role="button" aria-label="选择或拖拽文件上传">
+            <div>
+              <div class="drop-icon" aria-hidden="true">⇧</div>
+              <h2>拖拽文档到这里，或点击选择文件</h2>
+              <p>支持同时导入多个知识文档，后台任务会独立处理</p>
+              <div class="drop-formats">
+                <span class="format-chip">PDF 文档</span>
+                <span class="format-chip">Markdown</span>
+                <span class="format-chip">建议单文件 ≤ 100 MB</span>
+              </div>
+            </div>
+            <input class="file-input" id="fileInput" type="file" accept=".pdf,.md,.markdown,application/pdf,text/markdown" multiple>
+          </section>
+
+          <div class="upload-list-head">
+            <h2>导入任务</h2>
+            <span id="taskCount">尚未添加文件</span>
+          </div>
+          <section class="file-list" id="fileList" aria-live="polite">
+            <div class="empty-note" id="emptyNote">上传后可在这里查看每个处理节点的实时状态。</div>
+          </section>
+
+          <section class="import-tips" aria-label="导入说明">
+            <div class="tip-card"><b>智能文档解析</b><span>PDF 经 MinerU 转换为结构化 Markdown，并保留图文上下文。</span></div>
+            <div class="tip-card"><b>混合知识建模</b><span>内容同步进入 Milvus 向量库与 Neo4j 知识图谱。</span></div>
+            <div class="tip-card"><b>可观测工作流</b><span>每个 LangGraph 节点的完成、运行与失败状态实时可见。</span></div>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+  <div class="toast-region" id="toastRegion" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const API_BASE = location.protocol.startsWith('http')
+        ? `${location.protocol}//${location.host}`
+        : 'http://127.0.0.1:8000';
+      const $ = (selector, root = document) => root.querySelector(selector);
+      const dropZone = $('#dropZone');
+      const fileInput = $('#fileInput');
+      const fileList = $('#fileList');
+      const taskCount = $('#taskCount');
+      let totalTasks = 0;
+      let completedTasks = 0;
+
+      function showToast(message, type = '') {
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        $('#toastRegion').appendChild(toast);
+        setTimeout(() => toast.remove(), 3300);
+      }
+
+      function formatBytes(bytes) {
+        if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB'];
+        const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+        return `${(bytes / (1024 ** index)).toFixed(index ? 1 : 0)} ${units[index]}`;
+      }
+
+      function updateTaskCount() {
+        if (!totalTasks) taskCount.textContent = '尚未添加文件';
+        else taskCount.textContent = `${totalTasks} 个任务 · ${completedTasks} 个已完成`;
+      }
+
+      function setProgress(card, value, statusText) {
+        const percentage = Math.max(0, Math.min(100, Number(value) || 0));
+        $('.progress-bar', card).style.width = `${percentage}%`;
+        $('.progress-percent', card).textContent = `${Math.round(percentage)}%`;
+        if (statusText) $('.progress-stage', card).textContent = statusText;
+        if (percentage >= 100) $('.progress-bar', card).style.background = 'linear-gradient(90deg, #34d399, #5eead4)';
+      }
+
+      function setStatus(card, status, label) {
+        const badge = $('.file-status', card);
+        badge.className = `file-status status-${status}`;
+        badge.textContent = label;
+      }
+
+      function appendLog(card, text, className = '') {
+        const list = $('.log-list', card);
+        const li = document.createElement('li');
+        li.className = className;
+        li.textContent = text;
+        list.appendChild(li);
+        list.scrollTop = list.scrollHeight;
+      }
+
+      function createFileCard(file) {
+        const extension = file.name.split('.').pop().toUpperCase();
+        const card = document.createElement('article');
+        card.className = 'file-item';
+        card.innerHTML = `
+          <div class="file-main">
+            <div class="file-title-row">
+              <span class="file-type ${extension === 'MD' || extension === 'MARKDOWN' ? 'md' : ''}">${extension === 'MARKDOWN' ? 'MD' : extension}</span>
+              <span class="file-name"></span>
+              <span class="file-size"></span>
+            </div>
+            <div class="file-subline">正在准备上传到知识处理管线…</div>
+            <div class="progress-track"><div class="progress-bar"></div></div>
+            <div class="progress-meta"><span class="progress-stage">准备上传</span><span class="progress-percent">0%</span></div>
+            <details class="log-details" open>
+              <summary>查看节点日志</summary>
+              <ul class="log-list"></ul>
+            </details>
+          </div>
+          <span class="file-status status-uploading">准备中</span>`;
+        $('.file-name', card).textContent = file.name;
+        $('.file-size', card).textContent = formatBytes(file.size);
+        $('#emptyNote')?.remove();
+        fileList.prepend(card);
+        totalTasks += 1; updateTaskCount();
+        return card;
+      }
+
+      function renderLogs(card, doneList, runningList, failedList) {
+        const done = Array.isArray(doneList) ? doneList : [];
+        const running = Array.isArray(runningList) ? runningList : [];
+        const failed = Array.isArray(failedList) ? failedList : [];
+        const list = $('.log-list', card);
+        list.innerHTML = '';
+        appendLog(card, '文件已安全上传，后台工作流已启动', 'log-done');
+        done.forEach(text => appendLog(card, text, 'log-done'));
+        running.forEach(text => appendLog(card, text, 'log-running'));
+        failed.forEach(text => appendLog(card, text, 'log-error'));
+        if (!done.length && !running.length && !failed.length) appendLog(card, '等待第一个处理节点响应', 'log-running');
+        return { done, running, failed };
+      }
+
+      function markFailed(card, message) {
+        setStatus(card, 'error', '失败');
+        $('.file-subline', card).textContent = message;
+        appendLog(card, message, 'log-error');
+        $('.progress-stage', card).textContent = '处理失败';
+      }
+
+      function pollStatus(taskId, card, totalNodes) {
+        let networkFailures = 0;
+        const timer = setInterval(async () => {
+          try {
+            const response = await fetch(`${API_BASE}/status/${encodeURIComponent(taskId)}`);
+            if (!response.ok) throw new Error(`状态接口返回 HTTP ${response.status}`);
+            const data = await response.json();
+            networkFailures = 0;
+            const logs = renderLogs(card, data.done_list, data.running_list, data.failed_list);
+            let progress = ((logs.done.length + (logs.running.length ? .45 : 0)) / totalNodes) * 100;
+            progress = Math.min(progress, 96);
+
+            if (data.status === 'completed') {
+              clearInterval(timer);
+              setProgress(card, 100, '知识资产构建完成');
+              setStatus(card, 'completed', '已完成');
+              $('.file-subline', card).textContent = '已完成向量入库与知识图谱构建，可前往智能问答检索';
+              completedTasks += 1; updateTaskCount();
+              setTimeout(() => { $('.log-details', card).open = false; }, 800);
+              showToast('文档已成功导入知识库', 'success');
+            } else if (data.status === 'failed') {
+              clearInterval(timer);
+              markFailed(card, data.error || '知识导入工作流执行失败');
+            } else if (data.status === 'not_found') {
+              clearInterval(timer);
+              markFailed(card, '任务状态已失效，请重新上传文件');
+            } else {
+              setStatus(card, 'processing', data.status === 'uploaded' ? '已上传' : '处理中');
+              const runningText = logs.running[0] || '后台工作流正在执行';
+              $('.file-subline', card).textContent = runningText;
+              setProgress(card, Math.max(8, progress), `${logs.done.length} / ${totalNodes} 个节点完成`);
+            }
+          } catch (error) {
+            networkFailures += 1;
+            if (networkFailures === 1) appendLog(card, '状态连接短暂中断，正在自动重试', 'log-running');
+            if (networkFailures >= 8) {
+              clearInterval(timer);
+              markFailed(card, error.message || '无法连接任务状态接口');
+            }
+          }
+        }, 1400);
+      }
+
+      async function uploadFile(file) {
+        const name = file.name.toLowerCase();
+        if (!name.endsWith('.pdf') && !name.endsWith('.md') && !name.endsWith('.markdown')) {
+          showToast(`${file.name} 不是支持的 PDF 或 Markdown 文件`, 'error');
+          return;
+        }
+        if (file.size > 100 * 1024 * 1024) {
+          showToast(`${file.name} 超过 100 MB 上传上限`, 'error');
+          return;
+        }
+        const card = createFileCard(file);
+        const totalNodes = name.endsWith('.pdf') ? 8 : 7;
+        const formData = new FormData();
+        formData.append('file', file);
+        setProgress(card, 5, '正在上传文件');
+        setStatus(card, 'uploading', '上传中');
+        appendLog(card, `开始上传 ${file.name}`, 'log-running');
+
+        try {
+          const response = await fetch(`${API_BASE}/upload`, { method: 'POST', body: formData });
+          if (!response.ok) {
+            const detail = await response.text();
+            throw new Error(detail || `上传接口返回 HTTP ${response.status}`);
+          }
+          const data = await response.json();
+          if (!data.task_id) throw new Error('上传成功，但服务端未返回 task_id');
+          $('.log-list', card).innerHTML = '';
+          appendLog(card, '文件上传完成，已创建后台任务', 'log-done');
+          setProgress(card, 8, '启动解析管线');
+          setStatus(card, 'processing', '处理中');
+          $('.file-subline', card).textContent = `任务 ${String(data.task_id).slice(0, 8)} · 等待处理节点`;
+          pollStatus(data.task_id, card, totalNodes);
+        } catch (error) {
+          markFailed(card, error.message || '文件上传失败，请检查服务状态');
+        }
+      }
+
+      function handleFiles(fileCollection) {
+        [...fileCollection].forEach(uploadFile);
+        fileInput.value = '';
+      }
+
+      dropZone.addEventListener('click', event => {
+        if (event.target !== fileInput) fileInput.click();
+      });
+      dropZone.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); fileInput.click(); }
+      });
+      ['dragenter', 'dragover'].forEach(type => dropZone.addEventListener(type, event => {
+        event.preventDefault(); dropZone.classList.add('dragging');
+      }));
+      ['dragleave', 'drop'].forEach(type => dropZone.addEventListener(type, event => {
+        event.preventDefault(); dropZone.classList.remove('dragging');
+      }));
+      dropZone.addEventListener('drop', event => handleFiles(event.dataTransfer.files));
+      fileInput.addEventListener('change', event => handleFiles(event.target.files));
+      $('#goChat').addEventListener('click', () => { location.href = 'chat.html'; });
+      $('#mobileMenu').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
+      document.addEventListener('click', event => {
+        if (innerWidth <= 640 && !$('#sidebar').contains(event.target) && !$('#mobileMenu').contains(event.target)) $('#sidebar').classList.remove('open');
+      });
+      updateTaskCount();
+    })();
+  </script>
+</body>
+</html>

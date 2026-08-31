@@ -1,0 +1,1 @@
+"""Shopkeeper Brain test suite."""

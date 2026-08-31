@@ -1,0 +1,770 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080b14">
+  <meta name="description" content="店小智：融合向量检索、知识图谱与联网搜索的 Hybrid RAG Knowledge Studio。">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <title>智能问答 · Shopkeeper Brain</title>
+  <link rel="stylesheet" href="ui.css" onerror="if(!this.dataset.fallback){this.dataset.fallback='1';this.href='/front/ui.css'}">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar" aria-label="主导航">
+      <div class="brand-lockup">
+        <div class="brand-mark" aria-hidden="true">智</div>
+        <div class="brand-copy">
+          <div class="brand-name">Shopkeeper Brain</div>
+          <div class="brand-caption">店小智 · HYBRID RAG STUDIO</div>
+        </div>
+      </div>
+
+      <button class="new-chat" id="newChat" type="button">
+        <span class="plus" aria-hidden="true">＋</span><span>新建对话</span>
+      </button>
+
+      <div class="side-section-label">Workspace</div>
+      <nav class="side-nav">
+        <a class="active" href="chat.html" aria-current="page">
+          <span class="nav-icon" aria-hidden="true">◇</span><span>智能问答</span><span class="nav-badge">RAG</span>
+        </a>
+        <a href="import.html">
+          <span class="nav-icon" aria-hidden="true">⇧</span><span>知识导入</span><span class="nav-badge">PDF / MD</span>
+        </a>
+        <button type="button" id="historyShortcut">
+          <span class="nav-icon" aria-hidden="true">◷</span><span>当前会话</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-spacer"></div>
+      <section class="system-card" aria-label="系统状态">
+        <div class="system-card-head"><span>检索引擎</span><span class="online-dot" aria-label="在线"></span></div>
+        <div class="system-caption">混合检索链路运行正常，支持语义、图谱与联网信息融合。</div>
+        <div class="system-metrics">
+          <div class="metric"><span class="metric-value">3</span><span class="metric-label">检索通道</span></div>
+          <div class="metric"><span class="metric-value">SSE</span><span class="metric-label">实时响应</span></div>
+        </div>
+      </section>
+      <div class="side-footer">Hybrid RAG · Knowledge Graph<br>Built with LangGraph</div>
+    </aside>
+
+    <main class="main-panel">
+      <header class="topbar">
+        <button class="mobile-menu" id="mobileMenu" type="button" aria-label="打开导航">☰</button>
+        <div class="breadcrumb"><span>Shopkeeper Brain</span><span class="breadcrumb-sep">/</span><strong>智能问答</strong></div>
+        <div class="top-actions">
+          <div class="status-chip"><span class="online-dot"></span><span>服务在线</span></div>
+          <label class="stream-switch" title="开启后使用 SSE 实时显示生成结果">
+            <input id="streamToggle" type="checkbox" checked><span>流式输出</span>
+          </label>
+          <button class="outline-btn" id="btnClear" type="button" title="清空当前会话">清空</button>
+        </div>
+      </header>
+
+      <div class="content-scroll" id="chatScroll">
+        <div class="chat-wrap">
+          <section class="welcome" id="welcome">
+            <div class="eyebrow">Hybrid RAG Knowledge Studio</div>
+            <h1>把复杂知识，变成<br><em>可信赖的答案。</em></h1>
+            <p class="welcome-copy">基于多路召回、RRF 融合与 Rerank 重排序，从企业知识库和实时网络中定位证据，并用自然语言给出清晰回答。</p>
+            <div class="quick-grid" aria-label="快捷提问">
+              <button class="quick-card" type="button" data-prompt="请介绍一下当前知识库包含哪些内容，并给出我可以提问的方向。">
+                <span class="quick-icon">◎</span><span class="quick-title">探索知识库</span><span class="quick-desc">快速了解已收录内容与主题范围</span>
+              </button>
+              <button class="quick-card" type="button" data-prompt="请根据知识库，总结产品的核心功能、适用场景和注意事项。">
+                <span class="quick-icon">⌁</span><span class="quick-title">提炼产品信息</span><span class="quick-desc">融合文档与图谱，生成结构化摘要</span>
+              </button>
+              <button class="quick-card" type="button" data-prompt="如何使用万用表测量电压？请给出安全、详细的操作步骤。">
+                <span class="quick-icon">↗</span><span class="quick-title">查询操作方法</span><span class="quick-desc">从说明书中定位步骤与安全提示</span>
+              </button>
+            </div>
+            <div class="capability-row">
+              <span class="capability"><b></b>向量语义检索</span>
+              <span class="capability"><b></b>知识图谱增强</span>
+              <span class="capability"><b></b>联网信息补全</span>
+              <span class="capability"><b></b>多轮会话记忆</span>
+            </div>
+          </section>
+
+          <section class="messages" id="messages" aria-live="polite"></section>
+        </div>
+      </div>
+
+      <footer class="composer-shell">
+        <div class="composer">
+          <div class="composer-box">
+            <textarea id="input" rows="1" maxlength="4000" aria-label="输入问题" placeholder="向店小智提问，试试产品参数、操作步骤或故障排查…"></textarea>
+            <div class="composer-tools">
+              <button class="composer-tool" id="focusImport" type="button" title="导入知识文档" aria-label="导入知识文档">＋</button>
+              <button class="send-btn" id="send" type="button">发送 ↗</button>
+            </div>
+          </div>
+          <div class="composer-foot">
+            <span>AI 生成内容可能存在偏差，请核对关键信息</span>
+            <span><kbd>Enter</kbd> 发送 · <kbd>Shift</kbd> + <kbd>Enter</kbd> 换行 · <span class="char-count" id="charCount">0 / 4000</span></span>
+          </div>
+        </div>
+      </footer>
+    </main>
+  </div>
+  <div class="toast-region" id="toastRegion" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const API_BASE = location.protocol.startsWith('http')
+        ? `${location.protocol}//${location.host}`
+        : 'http://127.0.0.1:8000';
+      const $ = (selector, root = document) => root.querySelector(selector);
+      const messagesEl = $('#messages');
+      const welcomeEl = $('#welcome');
+      const scrollEl = $('#chatScroll');
+      const inputEl = $('#input');
+      const sendBtn = $('#send');
+      const streamToggle = $('#streamToggle');
+      const charCount = $('#charCount');
+      let activeStream = null;
+      let busy = false;
+      let sessionId = localStorage.getItem('shopkeeper_brain_session_id') || localStorage.getItem('kb_session_id');
+
+      if (!sessionId) sessionId = createSessionId();
+      persistSession();
+
+      function createSessionId() {
+        return `sess-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+      }
+
+      function persistSession() {
+        localStorage.setItem('shopkeeper_brain_session_id', sessionId);
+        localStorage.setItem('kb_session_id', sessionId);
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? '')
+          .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;').replaceAll("'", '&#039;');
+      }
+
+      function nowTime() {
+        return new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+      }
+
+      function formatTime(ts) {
+        if (!ts) return nowTime();
+        const numeric = Number(ts);
+        const date = new Date(numeric > 1e12 ? numeric : numeric * 1000);
+        return Number.isNaN(date.getTime()) ? nowTime() : date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+      }
+
+      function showToast(message, type = '') {
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        $('#toastRegion').appendChild(toast);
+        setTimeout(() => toast.remove(), 3300);
+      }
+
+      function scrollToBottom(smooth = false) {
+        requestAnimationFrame(() => scrollEl.scrollTo({ top: scrollEl.scrollHeight, behavior: smooth ? 'smooth' : 'auto' }));
+      }
+
+      function syncWelcome() {
+        welcomeEl.hidden = messagesEl.children.length > 0;
+      }
+
+      function setBusy(value) {
+        busy = value;
+        sendBtn.disabled = value;
+        sendBtn.textContent = value ? '生成中…' : '发送 ↗';
+      }
+
+      function resizeInput() {
+        inputEl.style.height = 'auto';
+        inputEl.style.height = `${Math.min(inputEl.scrollHeight, 150)}px`;
+        charCount.textContent = `${inputEl.value.length} / 4000`;
+      }
+
+      function textToHtml(rawText) {
+        const source = String(rawText ?? '').replace(/\r\n/g, '\n');
+        if (!source.trim()) return '<p>（未返回文本内容）</p>';
+        const codeBlocks = [];
+        let escaped = escapeHtml(source).replace(/```([\w+-]*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+          const token = `@@CODEBLOCK${codeBlocks.length}@@`;
+          codeBlocks.push(`<pre><code${lang ? ` data-language="${escapeHtml(lang)}"` : ''}>${code.trim()}</code></pre>`);
+          return token;
+        });
+        escaped = escaped
+          .replace(/^###\s+(.+)$/gm, '<h3>$1</h3>')
+          .replace(/^##\s+(.+)$/gm, '<h2>$1</h2>')
+          .replace(/^#\s+(.+)$/gm, '<h1>$1</h1>')
+          .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+          .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+          .replace(/\[([^\]]+)]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+        const lines = escaped.split('\n');
+        const out = [];
+        let listTag = '';
+        function closeList() { if (listTag) { out.push(`</${listTag}>`); listTag = ''; } }
+        for (const line of lines) {
+          if (/^@@CODEBLOCK\d+@@$/.test(line.trim())) { closeList(); out.push(line.trim()); continue; }
+          const ul = line.match(/^\s*[-*]\s+(.+)/);
+          const ol = line.match(/^\s*\d+[.)]\s+(.+)/);
+          if (ul || ol) {
+            const wanted = ul ? 'ul' : 'ol';
+            if (listTag !== wanted) { closeList(); listTag = wanted; out.push(`<${wanted}>`); }
+            out.push(`<li>${(ul || ol)[1]}</li>`);
+          } else {
+            closeList();
+            const value = line.trim();
+            if (!value) continue;
+            out.push(/^<h[1-3]>/.test(value) ? value : `<p>${value}</p>`);
+          }
+        }
+        closeList();
+        let html = out.join('');
+        codeBlocks.forEach((block, index) => { html = html.replace(`@@CODEBLOCK${index}@@`, block); });
+        return html;
+      }
+
+      function cleanUrl(raw) {
+        return String(raw ?? '').trim().replace(/\s/g, '%20');
+      }
+
+      function isImageUrl(raw) {
+        try { return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(new URL(raw, location.href).pathname); }
+        catch (_) { return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/i.test(raw ?? ''); }
+      }
+
+      function parseAnswer(rawAnswer, candidateUrls = []) {
+        let text = String(rawAnswer ?? '');
+        const urls = [];
+        const marker = /【\s*图片\s*】|\[\s*图片\s*]/g;
+        let match;
+        let lastMarker = null;
+        while ((match = marker.exec(text)) !== null) lastMarker = { index: match.index, length: match[0].length };
+        if (lastMarker) {
+          const suffix = text.slice(lastMarker.index + lastMarker.length);
+          text = text.slice(0, lastMarker.index).trimEnd();
+          urls.push(...(suffix.match(/https?:\/\/[^\s<>'"]+/g) || []));
+        }
+        urls.push(...(String(rawAnswer ?? '').match(/https?:\/\/[^\s<>'"]+/g) || []));
+        if (Array.isArray(candidateUrls)) urls.push(...candidateUrls);
+        const images = [...new Set(urls.map(cleanUrl).filter(isImageUrl))];
+        return { text, images };
+      }
+
+      function renderAnswer(container, answer, imageUrls = []) {
+        const parsed = parseAnswer(answer, imageUrls);
+        container.innerHTML = '';
+        const text = document.createElement('div');
+        text.className = 'answer-text';
+        text.innerHTML = textToHtml(parsed.text);
+        container.appendChild(text);
+        if (!parsed.images.length) return;
+        const grid = document.createElement('div');
+        grid.className = 'answer-images';
+        parsed.images.forEach((url, index) => {
+          const card = document.createElement('div');
+          card.className = 'answer-image-card';
+          const image = document.createElement('img');
+          image.src = url; image.alt = `知识库参考图 ${index + 1}`; image.loading = 'lazy'; image.referrerPolicy = 'no-referrer';
+          image.addEventListener('error', () => card.remove());
+          image.addEventListener('click', () => window.open(url, '_blank', 'noopener,noreferrer'));
+          const link = document.createElement('a');
+          link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = `查看原图 · ${index + 1}`;
+          card.append(image, link); grid.appendChild(card);
+        });
+        container.appendChild(grid);
+      }
+
+      function isPlainObject(value) {
+        return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+      }
+
+      function sourcePresentation(rawSource) {
+        const key = String(rawSource || 'local').trim().toLowerCase();
+        const online = key === 'web' || key.includes('web_') || key.includes('internet') || key.includes('online') || key.includes('联网');
+        const originMap = {
+          local: '知识库',
+          web: 'Web Search',
+          embedding: '向量检索',
+          hyde: 'HyDE',
+          knowledge_graph: '知识图谱',
+          kg: '知识图谱',
+          milvus: 'Milvus',
+          neo4j: 'Neo4j'
+        };
+        return {
+          kind: online ? 'online' : 'local',
+          label: online ? '联网' : '本地',
+          origin: originMap[key] || String(rawSource || '知识库')
+        };
+      }
+
+      function sourceUrlInfo(rawUrl) {
+        const value = String(rawUrl || '').trim();
+        if (!value) return null;
+        try {
+          const parsed = new URL(value, location.href);
+          if (!['http:', 'https:'].includes(parsed.protocol)) return { href: '', label: value, title: value };
+          const host = parsed.hostname.replace(/^www\./i, '');
+          const leaf = parsed.pathname.split('/').filter(Boolean).pop() || '';
+          let decodedLeaf = leaf;
+          try { decodedLeaf = decodeURIComponent(leaf); } catch (_) {}
+          const shortLeaf = decodedLeaf.length > 28 ? `${decodedLeaf.slice(0, 27)}…` : decodedLeaf;
+          return {
+            href: parsed.href,
+            label: shortLeaf ? `${host}/${shortLeaf}` : host,
+            title: value
+          };
+        } catch (_) {
+          return { href: '', label: value, title: value };
+        }
+      }
+
+      function formatScore(rawScore) {
+        if (rawScore === null || rawScore === undefined || rawScore === '') return '';
+        const score = Number(rawScore);
+        if (!Number.isFinite(score)) return '';
+        return score.toFixed(score >= 10 ? 2 : 4).replace(/0+$/, '').replace(/\.$/, '');
+      }
+
+      function createEvidenceSection(rawSources) {
+        const sources = Array.isArray(rawSources) ? rawSources.filter(isPlainObject) : [];
+        if (!sources.length) return null;
+
+        const section = document.createElement('section');
+        section.className = 'evidence-section';
+        section.setAttribute('aria-label', '引用证据');
+        const head = document.createElement('div');
+        head.className = 'evidence-head';
+        head.innerHTML = '<span class="evidence-head-icon" aria-hidden="true">⌘</span><strong>引用证据</strong>';
+        const count = document.createElement('span');
+        count.className = 'evidence-count';
+        count.textContent = `${sources.length} 条来源`;
+        head.appendChild(count);
+        section.appendChild(head);
+
+        const grid = document.createElement('div');
+        grid.className = 'evidence-grid';
+        sources.forEach((source, fallbackIndex) => {
+          const card = document.createElement('article');
+          card.className = 'evidence-card';
+          const top = document.createElement('div');
+          top.className = 'evidence-card-top';
+          const citation = document.createElement('span');
+          citation.className = 'citation-index';
+          const sourceIndex = Number(source.index);
+          citation.textContent = `[${Number.isInteger(sourceIndex) && sourceIndex > 0 ? sourceIndex : fallbackIndex + 1}]`;
+          const presentation = sourcePresentation(source.source);
+          const tag = document.createElement('span');
+          tag.className = `source-tag ${presentation.kind}`;
+          tag.textContent = presentation.label;
+          const origin = document.createElement('span');
+          origin.className = 'source-origin';
+          origin.textContent = presentation.origin;
+          top.append(citation, tag, origin);
+
+          const title = document.createElement('h3');
+          title.className = 'evidence-title';
+          title.textContent = String(source.title || source.parent_title || source.file_title || '未命名知识片段');
+          title.title = title.textContent;
+
+          card.append(top, title);
+          const crumbValues = [source.file_title, source.parent_title]
+            .map(value => String(value || '').trim())
+            .filter((value, index, values) => value && value !== title.textContent && values.indexOf(value) === index);
+          if (source.chunk_id) crumbValues.push(`片段 ${String(source.chunk_id).slice(0, 12)}`);
+          if (crumbValues.length) {
+            const crumb = document.createElement('div');
+            crumb.className = 'evidence-crumb';
+            crumb.textContent = crumbValues.join(' · ');
+            crumb.title = crumbValues.join(' · ');
+            card.appendChild(crumb);
+          }
+
+          const preview = document.createElement('p');
+          preview.className = 'evidence-preview';
+          preview.textContent = String(source.preview || '该证据未提供文本预览。');
+          card.appendChild(preview);
+
+          const footer = document.createElement('div');
+          footer.className = 'evidence-card-footer';
+          const score = document.createElement('span');
+          score.className = 'evidence-score';
+          const scoreValue = formatScore(source.score);
+          score.textContent = scoreValue ? `相关度 ${scoreValue}` : '答案引用';
+          footer.appendChild(score);
+          const urlInfo = sourceUrlInfo(source.url);
+          if (urlInfo) {
+            const urlEl = document.createElement(urlInfo.href ? 'a' : 'span');
+            urlEl.className = 'evidence-url';
+            urlEl.textContent = `${urlInfo.label}${urlInfo.href ? ' ↗' : ''}`;
+            urlEl.title = urlInfo.title;
+            if (urlInfo.href) {
+              urlEl.href = urlInfo.href;
+              urlEl.target = '_blank';
+              urlEl.rel = 'noopener noreferrer';
+            }
+            footer.appendChild(urlEl);
+          }
+          card.appendChild(footer);
+          grid.appendChild(card);
+        });
+        section.appendChild(grid);
+        return section;
+      }
+
+      function formatDuration(rawSeconds) {
+        if (rawSeconds === null || rawSeconds === undefined || rawSeconds === '') return '';
+        const seconds = Number(rawSeconds);
+        if (!Number.isFinite(seconds) || seconds < 0) return '';
+        if (seconds === 0) return '0 ms';
+        if (seconds < .001) return '<1 ms';
+        if (seconds < 1) return `${Math.round(seconds * 1000)} ms`;
+        if (seconds < 10) return `${seconds.toFixed(2)} s`;
+        return `${seconds.toFixed(1)} s`;
+      }
+
+      function retrievalLabel(rawName) {
+        const key = String(rawName || '').toLowerCase();
+        return ({
+          embedding: '向量召回',
+          hyde: 'HyDE 召回',
+          knowledge_graph: '图谱召回',
+          web: '联网召回',
+          rrf: 'RRF 融合',
+          rerank: '重排结果'
+        })[key] || String(rawName || '其他');
+      }
+
+      function timingLabel(rawName) {
+        const key = String(rawName || '').replace(/_node$/i, '').toLowerCase();
+        return ({
+          item_name_confirm: '意图识别',
+          search_embedding: '向量检索',
+          search_embedding_hyde: 'HyDE 检索',
+          query_kg: '知识图谱',
+          web_search_mcp: '联网检索',
+          web_search_mcp_agent: '联网代理',
+          rrf: 'RRF 融合',
+          rerank: 'Rerank 重排',
+          answer_output: '答案生成'
+        })[key] || String(rawName || '未知节点').replaceAll('_', ' ');
+      }
+
+      function createRetrievalTrace(rawDiagnostics) {
+        if (!isPlainObject(rawDiagnostics)) return null;
+        const traceId = String(rawDiagnostics.trace_id || '').trim();
+        const retrievalCounts = isPlainObject(rawDiagnostics.retrieval_counts)
+          ? Object.entries(rawDiagnostics.retrieval_counts)
+          : [];
+        const nodeTimings = isPlainObject(rawDiagnostics.node_timings)
+          ? Object.entries(rawDiagnostics.node_timings).filter(([, value]) => value !== null && value !== '' && Number.isFinite(Number(value)) && Number(value) >= 0)
+          : [];
+        const totalTime = formatDuration(rawDiagnostics.total_time);
+        if (!traceId && !retrievalCounts.length && !nodeTimings.length && !totalTime) return null;
+
+        const details = document.createElement('details');
+        details.className = 'retrieval-trace';
+        const summary = document.createElement('summary');
+        summary.innerHTML = '<span class="trace-icon"></span><span class="trace-title">检索轨迹</span>';
+        if (traceId) {
+          const shortId = document.createElement('span');
+          shortId.className = 'trace-id-short';
+          shortId.textContent = `#${traceId.slice(0, 8)}`;
+          summary.appendChild(shortId);
+        }
+        if (totalTime) {
+          const total = document.createElement('span');
+          total.className = 'trace-total';
+          total.textContent = `总耗时 ${totalTime}`;
+          summary.appendChild(total);
+        }
+        details.appendChild(summary);
+
+        const body = document.createElement('div');
+        body.className = 'trace-body';
+        if (retrievalCounts.length) {
+          const section = document.createElement('section');
+          section.className = 'trace-section';
+          section.innerHTML = '<div class="trace-section-label">多路召回数量</div>';
+          const grid = document.createElement('div');
+          grid.className = 'recall-grid';
+          retrievalCounts.forEach(([name, rawValue]) => {
+            const chip = document.createElement('div');
+            chip.className = 'recall-chip';
+            const label = document.createElement('span');
+            label.className = 'recall-name';
+            label.textContent = retrievalLabel(name);
+            label.title = label.textContent;
+            const value = document.createElement('span');
+            value.className = 'recall-value';
+            value.textContent = String(rawValue ?? 0);
+            chip.append(label, value); grid.appendChild(chip);
+          });
+          section.appendChild(grid); body.appendChild(section);
+        }
+
+        if (nodeTimings.length) {
+          const section = document.createElement('section');
+          section.className = 'trace-section';
+          section.innerHTML = '<div class="trace-section-label">节点耗时</div>';
+          const list = document.createElement('div');
+          list.className = 'timing-list';
+          const maxTiming = Math.max(...nodeTimings.map(([, value]) => Number(value)), .001);
+          nodeTimings.forEach(([name, rawValue]) => {
+            const seconds = Number(rawValue);
+            const row = document.createElement('div');
+            row.className = 'timing-row';
+            const label = document.createElement('span');
+            label.className = 'timing-name';
+            label.textContent = timingLabel(name);
+            label.title = label.textContent;
+            const track = document.createElement('span');
+            track.className = 'timing-track';
+            const bar = document.createElement('span');
+            bar.className = 'timing-bar';
+            bar.style.width = `${seconds === 0 ? 0 : Math.max(3, (seconds / maxTiming) * 100)}%`;
+            track.appendChild(bar);
+            const value = document.createElement('span');
+            value.className = 'timing-value';
+            value.textContent = formatDuration(seconds);
+            row.append(label, track, value); list.appendChild(row);
+          });
+          section.appendChild(list); body.appendChild(section);
+        }
+        if (traceId) {
+          const footer = document.createElement('div');
+          footer.className = 'trace-footer';
+          footer.textContent = `TRACE ${traceId}`;
+          footer.title = traceId;
+          body.appendChild(footer);
+        }
+        details.appendChild(body);
+        return details;
+      }
+
+      function renderAssistantExtras(refs, sources, diagnostics) {
+        const previous = refs.bubble.querySelector('.answer-extras');
+        if (previous) previous.remove();
+        const evidence = createEvidenceSection(sources);
+        const trace = createRetrievalTrace(diagnostics);
+        if (!evidence && !trace) return;
+        const wrapper = document.createElement('div');
+        wrapper.className = 'answer-extras';
+        if (evidence) wrapper.appendChild(evidence);
+        if (trace) wrapper.appendChild(trace);
+        const progress = refs.details && refs.details.isConnected ? refs.details : null;
+        refs.bubble.insertBefore(wrapper, progress);
+      }
+
+      function createMessage(role, options = {}) {
+        const article = document.createElement('article');
+        article.className = `msg ${role}`;
+        const avatar = document.createElement('div');
+        avatar.className = `avatar ${role === 'bot' ? 'bot' : ''}`;
+        avatar.textContent = role === 'bot' ? '智' : '我';
+        const content = document.createElement('div');
+        content.className = 'msg-content';
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        const answer = document.createElement('div');
+        answer.className = 'answer';
+        bubble.appendChild(answer);
+        const meta = document.createElement('div');
+        meta.className = 'msg-meta';
+        meta.textContent = `${role === 'bot' ? '店小智 · 知识库回答' : '你'} · ${formatTime(options.ts)}`;
+        content.append(bubble, meta);
+        role === 'user' ? article.append(content, avatar) : article.append(avatar, content);
+        messagesEl.appendChild(article);
+        const refs = { article, content, bubble, answer, meta };
+        if (role === 'user') answer.textContent = options.text ?? '';
+        else if (options.text !== undefined) {
+          renderAnswer(answer, options.text, options.imageUrls);
+          renderAssistantExtras(refs, options.sources, options.diagnostics);
+        }
+        syncWelcome(); scrollToBottom();
+        return refs;
+      }
+
+      function createBotSkeleton() {
+        const refs = createMessage('bot');
+        refs.answer.innerHTML = '<span class="typing" aria-label="正在生成"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></span>';
+        const details = document.createElement('details');
+        details.className = 'progress-card'; details.open = true;
+        details.innerHTML = '<summary><span class="progress-status"></span><span class="progress-label">正在建立检索链路…</span></summary><ul class="progress-list"><li class="running">任务已提交，等待工作流响应</li></ul>';
+        refs.bubble.appendChild(details);
+        return { ...refs, details };
+      }
+
+      function renderProgress(refs, doneList = [], runningList = [], status = 'processing', failedList = []) {
+        if (!refs.details || !refs.details.isConnected) return;
+        const done = Array.isArray(doneList) ? doneList : [];
+        const running = Array.isArray(runningList) ? runningList : [];
+        const failed = Array.isArray(failedList) ? failedList : [];
+        const statusText = { pending: '等待执行', uploaded: '已上传', processing: '检索与推理中', completed: '检索链路完成', failed: '执行失败', not_found: '任务不存在' }[status] || status;
+        $('.progress-label', refs.details).textContent = `${statusText} · 已完成 ${done.length} 步${running.length ? ` · 进行中 ${running.length} 步` : ''}`;
+        const dot = $('.progress-status', refs.details);
+        dot.className = `progress-status ${status === 'completed' ? 'done' : status === 'failed' ? 'failed' : ''}`;
+        const list = $('.progress-list', refs.details);
+        list.innerHTML = '';
+        const entries = [
+          ...done.map(text => ({ text, cls: 'done' })),
+          ...running.map(text => ({ text, cls: 'running' })),
+          ...failed.map(text => ({ text, cls: 'failed' }))
+        ];
+        if (!entries.length) entries.push({ text: '正在初始化任务', cls: 'running' });
+        entries.forEach(item => {
+          const li = document.createElement('li'); li.className = item.cls; li.textContent = item.text; list.appendChild(li);
+        });
+      }
+
+      function finalizeBot(refs, answer, error = '', imageUrls = [], sources = [], diagnostics = {}) {
+        const message = String(error || '').trim() ? `抱歉，本次任务未能完成。\n\n${error}` : (answer || '已完成检索，但没有生成可展示的文本答案。');
+        renderAnswer(refs.answer, message, imageUrls);
+        renderAssistantExtras(refs, sources, diagnostics);
+        if (refs.details) refs.details.open = false;
+        refs.meta.textContent = `店小智 · ${error ? '执行异常' : '基于知识库生成'} · ${nowTime()}`;
+        scrollToBottom();
+      }
+
+      async function submitQuery(text) {
+        const response = await fetch(`${API_BASE}/query`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: text, session_id: sessionId, is_stream: streamToggle.checked })
+        });
+        if (!response.ok) throw new Error(await response.text() || `HTTP ${response.status}`);
+        return response.json();
+      }
+
+      async function pollTask(taskId, refs) {
+        let misses = 0;
+        const timer = setInterval(async () => {
+          try {
+            const response = await fetch(`${API_BASE}/status/${encodeURIComponent(taskId)}`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const data = await response.json();
+            renderProgress(refs, data.done_list, data.running_list, data.status, data.failed_list);
+            if (data.status === 'completed' || data.status === 'failed') {
+              clearInterval(timer);
+              finalizeBot(refs, data.answer, data.error || (data.status === 'failed' ? '工作流执行失败' : ''), data.image_urls, data.sources, data.diagnostics);
+              setBusy(false);
+            }
+          } catch (_) {
+            misses += 1;
+            if (misses >= 6) { clearInterval(timer); finalizeBot(refs, '', '无法获取任务状态，请确认服务已启动。'); setBusy(false); }
+          }
+        }, 1200);
+      }
+
+      function openStream(taskId, refs) {
+        const es = new EventSource(`${API_BASE}/stream/${encodeURIComponent(taskId)}`);
+        activeStream = es;
+        let rawAnswer = '';
+        let finished = false;
+        const finish = (answer, error, images, sources, diagnostics) => {
+          if (finished) return;
+          finished = true; es.close(); activeStream = null;
+          finalizeBot(refs, answer || rawAnswer, error, images, sources, diagnostics); setBusy(false);
+        };
+        es.addEventListener('ready', () => renderProgress(refs, [], ['已建立实时响应通道'], 'processing'));
+        es.addEventListener('progress', event => {
+          try { const data = JSON.parse(event.data || '{}'); renderProgress(refs, data.done_list, data.running_list, data.status, data.failed_list); }
+          catch (_) {}
+        });
+        es.addEventListener('delta', event => {
+          try {
+            const data = JSON.parse(event.data || '{}'); rawAnswer += data.delta || '';
+            renderAnswer(refs.answer, rawAnswer); scrollToBottom();
+          } catch (_) {}
+        });
+        const onFinal = event => {
+          try { const data = JSON.parse(event.data || '{}'); finish(data.answer, data.error, data.image_urls, data.sources, data.diagnostics); }
+          catch (_) { finish(rawAnswer); }
+        };
+        es.addEventListener('final', onFinal);
+        es.addEventListener('final_answer', onFinal);
+        es.addEventListener('error', event => {
+          if (finished) return;
+          let message = '';
+          try { message = JSON.parse(event.data || '{}').error || ''; } catch (_) {}
+          finish(rawAnswer, rawAnswer ? '' : (message || '实时连接中断，请稍后重试。'));
+        });
+      }
+
+      async function onSend(overrideText) {
+        if (busy) return;
+        const text = String(overrideText ?? inputEl.value).trim();
+        if (!text) { inputEl.focus(); return; }
+        inputEl.value = ''; resizeInput();
+        createMessage('user', { text });
+        const refs = createBotSkeleton();
+        setBusy(true);
+        try {
+          const data = await submitQuery(text);
+          if (data.session_id) { sessionId = data.session_id; persistSession(); }
+          if (streamToggle.checked && data.task_id) openStream(data.task_id, refs);
+          else if (data.task_id && data.answer === undefined) pollTask(data.task_id, refs);
+          else {
+            renderProgress(refs, data.done_list, [], data.error ? 'failed' : 'completed');
+            finalizeBot(refs, data.answer, data.error, data.image_urls, data.sources, data.diagnostics); setBusy(false);
+          }
+        } catch (error) {
+          finalizeBot(refs, '', error.message || String(error)); setBusy(false);
+        }
+      }
+
+      async function loadHistory() {
+        try {
+          const response = await fetch(`${API_BASE}/history/${encodeURIComponent(sessionId)}?limit=50`);
+          if (!response.ok) return;
+          const data = await response.json();
+          const items = Array.isArray(data.items) ? data.items : [];
+          items.forEach(item => createMessage(item.role === 'user' ? 'user' : 'bot', {
+            text: item.text || '',
+            ts: item.ts,
+            imageUrls: item.image_urls || [],
+            sources: item.sources || [],
+            diagnostics: item.diagnostics || {}
+          }));
+          syncWelcome();
+        } catch (_) { /* History is optional when MongoDB is not configured. */ }
+      }
+
+      async function clearConversation(createFresh = false) {
+        if (activeStream) { activeStream.close(); activeStream = null; }
+        try {
+          const response = await fetch(`${API_BASE}/history/${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
+          if (!response.ok) throw new Error();
+        } catch (_) {
+          if (!createFresh) showToast('服务端历史暂不可用，已清空本地显示', 'error');
+        }
+        messagesEl.innerHTML = '';
+        if (createFresh) { sessionId = createSessionId(); persistSession(); }
+        syncWelcome(); setBusy(false); inputEl.focus(); scrollToBottom();
+        if (createFresh) showToast('已创建新会话', 'success');
+      }
+
+      inputEl.addEventListener('input', resizeInput);
+      inputEl.addEventListener('keydown', event => {
+        if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); onSend(); }
+      });
+      sendBtn.addEventListener('click', () => onSend());
+      document.querySelectorAll('[data-prompt]').forEach(button => button.addEventListener('click', () => onSend(button.dataset.prompt)));
+      $('#focusImport').addEventListener('click', () => { location.href = 'import.html'; });
+      $('#newChat').addEventListener('click', () => clearConversation(true));
+      $('#btnClear').addEventListener('click', () => { if (confirm('确定清空当前会话吗？服务端历史记录也会被删除。')) clearConversation(false); });
+      $('#historyShortcut').addEventListener('click', () => { $('#sidebar').classList.remove('open'); scrollToBottom(true); });
+      $('#mobileMenu').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
+      document.addEventListener('click', event => {
+        if (innerWidth <= 640 && !$('#sidebar').contains(event.target) && !$('#mobileMenu').contains(event.target)) $('#sidebar').classList.remove('open');
+      });
+
+      resizeInput(); syncWelcome(); loadHistory(); setTimeout(() => inputEl.focus(), 150);
+    })();
+  </script>
+</body>
+</html>

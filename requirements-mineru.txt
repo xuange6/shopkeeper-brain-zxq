@@ -1,0 +1,4 @@
+-r requirements.txt
+
+# Full PDF parsing stack. This is intentionally separate because it is large.
+mineru[all]>=3.1,<4

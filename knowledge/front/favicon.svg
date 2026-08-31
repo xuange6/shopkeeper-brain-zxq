@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="g" x1="8" y1="6" x2="58" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#67e8f9"/>
+      <stop offset=".52" stop-color="#5eead4"/>
+      <stop offset="1" stop-color="#a78bfa"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="18" fill="#0b1020"/>
+  <rect x="4" y="4" width="56" height="56" rx="15" fill="url(#g)"/>
+  <path d="M18 22.5h28M18 41.5h28M23 17v30M41 17v30" stroke="#07141e" stroke-width="3" stroke-linecap="round" opacity=".18"/>
+  <text x="32" y="41" text-anchor="middle" fill="#07141e" font-size="29" font-family="Microsoft YaHei, PingFang SC, sans-serif" font-weight="900">智</text>
+</svg>

@@ -1,0 +1,4 @@
+﻿# Backward-compatible entry point.
+# New installations should use the repository-root dependency files:
+#   pip install -r requirements-mineru.txt
+-r ../requirements-mineru.txt
