@@ -90,4 +90,4 @@ def get_default_state() -> ImportGraphState:
     Returns:
         状态副本（避免全局污染）
     """
-    return copy.deepcopy(GRAPH_DEFAULT_STATE)\r\n
+    return copy.deepcopy(GRAPH_DEFAULT_STATE)

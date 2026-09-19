@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import concurrent.futures
+import time
 import unittest
 from unittest.mock import patch
 
@@ -11,6 +13,29 @@ from knowledge.service.query_service import QueryService
 
 
 class RetrievalTests(unittest.TestCase):
+    def test_embedding_model_is_initialized_once_under_concurrency(self) -> None:
+        from knowledge.utils import embedding_utils
+
+        sentinel = object()
+
+        def slow_constructor(**_kwargs):
+            time.sleep(0.05)
+            return sentinel
+
+        with (
+            patch.object(embedding_utils, "_bge_m3_model", None),
+            patch.object(
+                embedding_utils,
+                "BGEM3EmbeddingFunction",
+                side_effect=slow_constructor,
+            ) as constructor,
+            concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor,
+        ):
+            models = list(executor.map(lambda _index: embedding_utils.get_bge_m3_model(), range(2)))
+
+        self.assertEqual(constructor.call_count, 1)
+        self.assertTrue(all(model is sentinel for model in models))
+
     def test_rrf_merges_duplicate_chunks_and_records_sources(self) -> None:
         results = RrfNode._rrf_merge(
             search_resources={

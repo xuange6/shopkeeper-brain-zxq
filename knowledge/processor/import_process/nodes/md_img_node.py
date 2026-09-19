@@ -651,9 +651,14 @@ class MarkDownImageNode(BaseNode):
 if __name__ == '__main__':
     setup_logging()
     img_md_node= MarkDownImageNode()
-
+    demo_dir = Path(__file__).resolve().parents[1] / "import_temp_Dir"
     state = {
-        "md_path":r"C:\Users\TCzhao\PycharmProjects\251020\shopkeeper_brain\knowledge\processor\import_process\import_temp_Dir\hak180使用说明书\hybrid_auto\hak180使用说明书.md"
+        "md_path": str(
+            demo_dir
+            / "hak180使用说明书"
+            / "hybrid_auto"
+            / "hak180使用说明书.md"
+        )
     }
     result = img_md_node.process(state)
     print(json.dumps(result, indent=4, ensure_ascii=False))

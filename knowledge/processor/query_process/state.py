@@ -23,6 +23,20 @@ def merge_node_timings(
     return merged
 
 
+def merge_dict_fields(
+    left: Dict[str, Any] | None,
+    right: Dict[str, Any] | None,
+) -> Dict[str, Any]:
+    """Merge diagnostic dictionaries written by parallel retrieval nodes."""
+
+    merged: Dict[str, Any] = {}
+    if isinstance(left, dict):
+        merged.update(left)
+    if isinstance(right, dict):
+        merged.update(right)
+    return merged
+
+
 class QueryGraphState(TypedDict, total=False):
     """Runtime state passed between query workflow nodes."""
 
@@ -61,6 +75,7 @@ class QueryGraphState(TypedDict, total=False):
     # Control and diagnostics
     is_stream: bool
     node_timings: Annotated[Dict[str, Any], merge_node_timings]
+    retrieval_status: Annotated[Dict[str, Any], merge_dict_fields]
 
 
 DEFAULT_STATE: QueryGraphState = {
@@ -90,6 +105,7 @@ DEFAULT_STATE: QueryGraphState = {
     "sources": [],
     "is_stream": False,
     "node_timings": {},
+    "retrieval_status": {},
 }
 
 

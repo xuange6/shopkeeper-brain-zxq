@@ -29,7 +29,12 @@ class ItemExtractor:
         self.config = config or get_config()
         self.logger = logging.getLogger("query.item_extractor")
 
-    def extract(self, query: str, history: List[Dict] | None = None) -> Dict[str, Any]:
+    def extract(
+        self,
+        query: str,
+        history: List[Dict] | None = None,
+        trace_id: str = "",
+    ) -> Dict[str, Any]:
         result = {"item_names": [], "rewritten_query": query}
         if not query:
             return result
@@ -49,7 +54,7 @@ class ItemExtractor:
             from langchain_core.messages import HumanMessage, SystemMessage
             from knowledge.utils.llm_utils import get_llm_client
 
-            llm_client = get_llm_client(model, json_mode=True)
+            llm_client = get_llm_client(model, json_mode=True, trace_id=trace_id)
             response = llm_client.invoke(
                 [
                     SystemMessage(content=self._SYSTEM_PROMPT),
@@ -365,14 +370,30 @@ class ItemNameConfirmNode(BaseNode):
         if message_id:
             state["message_id"] = message_id
 
-        extracted = self.extractor.extract(query, history)
-        item_names = extracted.get("item_names", [])
-        rewritten_query = extracted.get("rewritten_query", query)
-
-        if item_names:
-            confirmed, options = self.aligner.match_align(item_names)
+        provided_item_names = list(
+            dict.fromkeys(
+                str(name).strip()
+                for name in state.get("item_names") or []
+                if str(name).strip()
+            )
+        )
+        if provided_item_names:
+            # QueryRequest.item_names is an explicit caller constraint. Respecting it
+            # avoids an unnecessary model call and makes evaluation runs reproducible.
+            confirmed, options = provided_item_names, []
+            rewritten_query = query
         else:
-            confirmed, options = [], []
+            extracted = self.extractor.extract(
+                query,
+                history,
+                trace_id=state.get("task_id", ""),
+            )
+            item_names = extracted.get("item_names", [])
+            rewritten_query = extracted.get("rewritten_query", query)
+            if item_names:
+                confirmed, options = self.aligner.match_align(item_names)
+            else:
+                confirmed, options = [], []
 
         self._decide(state, confirmed, options, rewritten_query, history)
         self._write_history(state, session_id, query, rewritten_query, message_id)

@@ -33,6 +33,7 @@ class BaseNode(ABC):
 
         try:
             result = self.process(state)
+            self._record_stage_status(result, "ok")
             elapsed_seconds = time.perf_counter() - start_time
             self._record_timing(result, elapsed_seconds)
             self.logger.info("--- %s done, %.2fs ---", self.name, elapsed_seconds)
@@ -67,6 +68,23 @@ class BaseNode(ABC):
             state["node_timings"] = timings
 
         timings[self.name] = round(elapsed_seconds, 3)
+
+    def _record_stage_status(self, state: T, status: str, reason: str = "") -> None:
+        if not isinstance(state, dict) or self.name not in {
+            "search_embedding",
+            "search_embedding_hyde",
+            "query_kg",
+            "web_search_mcp",
+            "rrf",
+            "rerank_node",
+        }:
+            return
+        statuses = state.get("retrieval_status")
+        if not isinstance(statuses, dict):
+            statuses = {}
+            state["retrieval_status"] = statuses
+        if self.name not in statuses:
+            statuses[self.name] = {"status": status, "reason": reason}
 
     @abstractmethod
     def process(self, state: T) -> T:

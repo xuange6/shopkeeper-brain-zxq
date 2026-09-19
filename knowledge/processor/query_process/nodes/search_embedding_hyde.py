@@ -33,11 +33,17 @@ class SearchEmbeddingHydeNode(BaseNode):
         item_names = state.get("item_names")
 
         if not query:
-            return {"hyde_embedding_chunks": [], "hyde_doc": ""}
+            return {
+                "hyde_embedding_chunks": [],
+                "hyde_doc": "",
+                "retrieval_status": {
+                    self.name: {"status": "skipped", "reason": "empty query"}
+                },
+            }
 
         try:
             self.log_step("step_1", "生成假设性文档")
-            hyde_doc = self._generate_hyde_doc(query)
+            hyde_doc = self._generate_hyde_doc(query, state.get("task_id", ""))
 
             self.log_step("step_2", "执行混合搜索")
             chunks = self._search(query, hyde_doc, item_names)
@@ -46,13 +52,19 @@ class SearchEmbeddingHydeNode(BaseNode):
             return {"hyde_embedding_chunks": chunks, "hyde_doc": hyde_doc}
         except Exception as exc:
             self.logger.error("HyDE 搜索失败: %s", exc)
-            return {"hyde_embedding_chunks": [], "hyde_doc": ""}
+            return {
+                "hyde_embedding_chunks": [],
+                "hyde_doc": "",
+                "retrieval_status": {
+                    self.name: {"status": "error", "reason": str(exc)[:500]}
+                },
+            }
 
-    def _generate_hyde_doc(self, query: str) -> str:
+    def _generate_hyde_doc(self, query: str, trace_id: str = "") -> str:
         """使用 LLM 根据用户查询生成假设性答案文档。"""
         from knowledge.utils.llm_utils import get_llm_client
 
-        llm = get_llm_client()
+        llm = get_llm_client(trace_id=trace_id)
         prompt = HYDE_PROMPT_TEMPLATE.format(query=query)
         response = llm.invoke(prompt)
         return str(response.content).strip()

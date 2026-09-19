@@ -33,6 +33,7 @@ dist/
 *.egg-info/
 logs/
 *.log
+evaluation/results/
 .tmp_upload_test/
 docs/.edge-*/
 docs/images/chat-mobile-preview.png

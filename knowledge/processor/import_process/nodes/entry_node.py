@@ -29,8 +29,6 @@ class EntryNode(BaseNode):
         self.log_step("Step2", "{检测文件路径")
         if not file_dir or not import_file_path:
             raise ValidationError("文件目录或者文件不存在", self.name)
-        # import_file_path: C:\Users\TCzhao\PycharmProjects\251020\shopkeeper_brain\knowledge\processor\import_process\import_temp_Dir\hak180使用说明书.pdf
-
         # 使用标准的path对象操作文件逻辑
         # 4. 获取上传文件的后缀
         path = Path(import_file_path)
@@ -53,12 +51,13 @@ class EntryNode(BaseNode):
         return state
 
 if __name__ == '__main__':
-    pdf_path = r"C:\Users\TCzhao\PycharmProjects\251020\shopkeeper_brain\knowledge\processor\import_process\import_temp_Dir\hak180使用说明书.pdf"
+    demo_dir = Path(__file__).resolve().parents[1] / "import_temp_Dir"
+    pdf_path = demo_dir / "hak180使用说明书.pdf"
     setup_logging()
     # 方式1：直接实例该节点对象 调用process的的方法
     test_entry_state = {
-        "file_dir":r"C:\Users\TCzhao\PycharmProjects\251020\shopkeeper_brain\knowledge\processor\import_process\import_temp_Dir",
-        "import_file_path":pdf_path
+        "file_dir": str(demo_dir),
+        "import_file_path": str(pdf_path),
     }
     # 实例化节点
     entry_node = EntryNode()

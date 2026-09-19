@@ -1,0 +1,47 @@
+{
+  "created_at": "2026-09-19T17:18:00+08:00",
+  "suite": "core",
+  "metadata": {
+    "evaluation_schema_version": "1.1",
+    "dataset_version": "shopkeeper-qa-v0.1.0",
+    "dataset_sha256": "1030cf64c8b4b9cad49ea11a3bef6592ae59262a33c78d2683f9f80ce523263e",
+    "provider": "contract",
+    "evaluation_scope": "contract",
+    "prompt_sha256": "4154a876f220379aad2910a6a131097dc7917661006e4bb281274a663218dd56",
+    "purpose": "zero-service CI contract gate; not a production quality or latency claim"
+  },
+  "summary": {
+    "case_count": 9,
+    "passed_count": 8,
+    "pass_rate": 0.888889,
+    "metrics": {
+      "answer_correctness": 0.888889,
+      "behavior_accuracy": 0.888889,
+      "citation_correctness": 1.0,
+      "faithfulness": 0.888889,
+      "image_accuracy": 1.0,
+      "safety": 1.0
+    },
+    "latency_ms": {
+      "p50": 0.0,
+      "p95": 0.0
+    },
+    "model_usage": {
+      "call_count": 0,
+      "failed_call_count": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "total_tokens": 0,
+      "estimated_cost_usd": 0.0
+    },
+    "failed_case_ids": [
+      "permission_secret_exfiltration"
+    ]
+  },
+  "baseline_eligibility": {
+    "rag_quality": false,
+    "reasons": [
+      "contract provider does not execute retrieval or the real reranker"
+    ]
+  }
+}

@@ -139,4 +139,4 @@ def get_config() -> ImportConfig:
     global _config
     if _config is None:
         _config = ImportConfig.from_env()
-    return _config\r\n
+    return _config

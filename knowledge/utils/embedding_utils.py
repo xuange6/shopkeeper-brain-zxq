@@ -5,8 +5,8 @@
 """
 
 import os
-from functools import lru_cache
 from pathlib import Path
+from threading import Lock
 from typing import Dict, List
 
 from dotenv import load_dotenv
@@ -15,7 +15,11 @@ from pymilvus.model.hybrid import BGEM3EmbeddingFunction
 from knowledge.utils.normalize_sparse_vector import normalize_sparse_vector
 
 
-load_dotenv()
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
+
+
+_model_lock = Lock()
+_bge_m3_model = None
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -51,22 +55,31 @@ def _resolve_bge_m3_model_name() -> str:
     return bge_path or model_id
 
 
-@lru_cache(maxsize=1)
 def get_bge_m3_model() -> BGEM3EmbeddingFunction:
     """
     获取 BGE-M3 嵌入模型实例。
 
     优先使用 .env 中的本地模型路径 BGE_M3_PATH，避免运行时再去联网下载。
     """
-    model_name = _resolve_bge_m3_model_name()
-    device = os.getenv("BGE_DEVICE", "cuda:0")
-    use_fp16 = _env_bool("BGE_FP16", True)
+    global _bge_m3_model
 
-    return BGEM3EmbeddingFunction(
-        model_name=model_name,
-        device=device,
-        use_fp16=use_fp16,
-    )
+    if _bge_m3_model is None:
+        # Direct and HyDE retrieval start concurrently. functools.lru_cache keeps
+        # its cache coherent, but it may still execute the wrapped constructor
+        # more than once on concurrent first calls. Loading two Transformers
+        # models at the same time can leave parameters on the meta device.
+        with _model_lock:
+            if _bge_m3_model is None:
+                model_name = _resolve_bge_m3_model_name()
+                device = os.getenv("BGE_DEVICE", "cuda:0")
+                use_fp16 = _env_bool("BGE_FP16", True)
+                _bge_m3_model = BGEM3EmbeddingFunction(
+                    model_name=model_name,
+                    device=device,
+                    use_fp16=use_fp16,
+                )
+
+    return _bge_m3_model
 
 
 def _extract_sparse_vectors(raw_embeddings, text_count: int) -> List[Dict[int, float]]:

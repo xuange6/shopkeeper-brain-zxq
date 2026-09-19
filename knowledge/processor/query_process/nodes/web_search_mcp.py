@@ -21,7 +21,31 @@ class WebSearchMcpNode(BaseNode):
     def process(self, state: QueryGraphState) -> QueryGraphState:
         query, _item_names = self._validate_query_inputs(state)
 
-        result = asyncio.run(self._create_execute_web_search(query))
+        if not self.config.mcp_dashscope_base_url:
+            return {
+                "web_search_docs": [],
+                "retrieval_status": {
+                    self.name: {"status": "skipped", "reason": "MCP URL not configured"}
+                },
+            }
+        if not self.config.openai_api_key:
+            return {
+                "web_search_docs": [],
+                "retrieval_status": {
+                    self.name: {"status": "skipped", "reason": "API key not configured"}
+                },
+            }
+
+        try:
+            result = asyncio.run(self._create_execute_web_search(query))
+        except Exception as exc:
+            self.logger.error("MCP 搜索失败: %s", exc, exc_info=True)
+            return {
+                "web_search_docs": [],
+                "retrieval_status": {
+                    self.name: {"status": "error", "reason": str(exc)[:500]}
+                },
+            }
         if not result:
             return {"web_search_docs": []}
 
@@ -47,13 +71,6 @@ class WebSearchMcpNode(BaseNode):
 
     async def _create_execute_web_search(self, query: str) -> List[Dict[str, Any]]:
         """连接 MCP 服务端，调用 bailian_web_search 工具并解析结果。"""
-        if not self.config.mcp_dashscope_base_url:
-            self.logger.warning("MCP_DASHSCOPE_BASE_URL 未配置，跳过网络搜索")
-            return []
-        if not self.config.openai_api_key:
-            self.logger.warning("OPENAI_API_KEY 未配置，跳过网络搜索")
-            return []
-
         authorization = self.config.openai_api_key.strip()
         if not authorization.lower().startswith("bearer "):
             authorization = f"Bearer {authorization}"
@@ -74,9 +91,6 @@ class WebSearchMcpNode(BaseNode):
                 arguments={"query": query, "count": 3},
             )
             return self._parse_search_result(tool_result)
-        except Exception as exc:
-            self.logger.error("MCP 搜索失败: %s", exc, exc_info=True)
-            return []
         finally:
             await mcp_client.cleanup()
 

@@ -85,7 +85,7 @@ class _EntityExtractor:
     def __init__(self):
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def extract(self, question: str) -> List[str]:
+    def extract(self, question: str, trace_id: str = "") -> List[str]:
         """抽取实体。失败时返回空列表，不阻断查询流程。"""
         if not question.strip():
             return []
@@ -93,7 +93,7 @@ class _EntityExtractor:
         try:
             from knowledge.utils.llm_utils import get_llm_client
 
-            llm = get_llm_client(json_mode=True)
+            llm = get_llm_client(json_mode=True, trace_id=trace_id)
             response = llm.invoke(
                 [
                     SystemMessage(content=_ENTITY_EXTRACT_SYSTEM_PROMPT),
@@ -631,7 +631,10 @@ class QueryKgNode(BaseNode):
             return self._empty_result()
 
         self.log_step("step_1", "抽取查询实体")
-        entities = _EntityExtractor().extract(question)
+        entities = _EntityExtractor().extract(
+            question,
+            trace_id=state.get("task_id", ""),
+        )
 
         self.log_step("step_2", "对齐入库实体")
         align_result = _EntityAligner(

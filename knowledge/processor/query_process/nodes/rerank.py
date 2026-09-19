@@ -24,13 +24,53 @@ class RerankNode(BaseNode):
         merged_multi_docs = self._deduplicate_docs(self._merge_multi_source_docs(state))
 
         # 3. Rerank 精排（精排打分）
-        reranked_docs = self._rerank_merged_docs(user_query, merged_multi_docs)
+        reranked_docs, rerank_status = self._rerank_with_status(
+            user_query, merged_multi_docs
+        )
 
         # 4. 动态 Top_K 截取（断崖检测）
         cutoff_docs = self._cliff_cutoff(reranked_docs)
 
         state["reranked_docs"] = cutoff_docs
+        state["retrieval_status"] = {
+            **(state.get("retrieval_status") or {}),
+            self.name: rerank_status,
+        }
         return state
+
+    def _rerank_with_status(
+        self,
+        user_query: str,
+        merged_multi_docs: List[Dict[str, Any]],
+    ) -> tuple[List[Dict[str, Any]], Dict[str, str]]:
+        if not merged_multi_docs:
+            return [], {"status": "ok", "reason": "no candidates"}
+
+        rerank_model = get_reranker_model()
+        if rerank_model is None:
+            self.logger.warning("重排序模型不可用，按 RRF/Web 原顺序降级")
+            return (
+                [{**doc, "score": None} for doc in merged_multi_docs],
+                {"status": "degraded", "reason": "reranker unavailable"},
+            )
+
+        pairs = [(user_query, doc.get("content")) for doc in merged_multi_docs]
+        try:
+            scores = rerank_model.compute_score(sentence_pairs=pairs)
+            ranked = [
+                {**doc, "score": score}
+                for doc, score in zip(merged_multi_docs, scores)
+            ]
+            return (
+                sorted(ranked, key=lambda item: item["score"], reverse=True),
+                {"status": "ok", "reason": ""},
+            )
+        except Exception as exc:
+            self.logger.error("Rerank 重排序失败：%s", exc)
+            return (
+                [{**doc, "score": None} for doc in merged_multi_docs],
+                {"status": "error", "reason": str(exc)[:500]},
+            )
 
     def _cliff_cutoff(
         self,

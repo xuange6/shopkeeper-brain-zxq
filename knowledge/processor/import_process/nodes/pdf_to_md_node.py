@@ -179,7 +179,6 @@ class PdfToMdNode(BaseNode):
         return executable_name
 
     def _get_md_paths(self, import_file_path: Path, file_dir_path: Path) -> str:
-        # file_air_path = C:\Users\TCzhao\PycharmProjects\251020\shopkeeper_brain\knowledge\processor\import_process\import_temp_Dir
         # name 名字.xxx  stem：只拿名字 后缀：suffix
         file_name = import_file_path.stem
 
@@ -204,9 +203,10 @@ class PdfToMdNode(BaseNode):
 if __name__ == '__main__':
     setup_logging()
     pdf_to_md_node = PdfToMdNode()
+    demo_dir = Path(__file__).resolve().parents[1] / "import_temp_Dir"
     pdf_to_md_node_init_state = {
-        "import_file_path":r"C:\Users\TCzhao\PycharmProjects\251020\shopkeeper_brain\knowledge\processor\import_process\import_temp_Dir\hak180使用说明书.pdf",
-        "file_dir":r"C:\Users\TCzhao\PycharmProjects\251020\shopkeeper_brain\knowledge\processor\import_process\import_temp_Dir"
+        "import_file_path": str(demo_dir / "hak180使用说明书.pdf"),
+        "file_dir": str(demo_dir),
     }
     process_result = pdf_to_md_node.process(pdf_to_md_node_init_state)
-    print(json.dumps(process_result, indent=4, ensure_ascii=False))\r\n
+    print(json.dumps(process_result, indent=4, ensure_ascii=False))

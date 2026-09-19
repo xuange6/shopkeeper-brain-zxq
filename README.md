@@ -223,8 +223,14 @@ knowledge/
 
 ```powershell
 python -m unittest discover -s tests -v
-python -m compileall -q -x "\\.venv|import_temp_Dir|__pycache__" knowledge tests
+python -m compileall -q -x "\\.venv|import_temp_Dir|__pycache__" knowledge tests scripts
+python scripts/run_evaluation.py --provider contract --baseline evaluation/baselines/stage0-contract.core.json
 ```
+
+最后一条命令运行无外部费用的契约门禁，但不声称测到了召回率。连接真实模型、
+Milvus、Neo4j、MongoDB 和 Web MCP 的完整评测默认执行 `python scripts/run_evaluation.py`；
+数据版本纪律与阶段 0 基线状态见
+[`evaluation/README.md`](evaluation/README.md)。
 
 GitHub Actions 也会执行同类的轻量单元测试和语法检查，但不会连接真实模型或外部数据库。完整的 MinerU、模型、Milvus、Neo4j、MongoDB 和 MinIO 链路，需要在自己的环境里再跑一遍。
 

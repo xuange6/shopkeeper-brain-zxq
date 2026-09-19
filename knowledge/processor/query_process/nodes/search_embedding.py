@@ -33,7 +33,12 @@ class SearchEmbeddingNode(BaseNode):
         collection_name = self.config.chunks_collection or "chunks_test"
 
         if not query:
-            return {"embedding_chunks": []}
+            return {
+                "embedding_chunks": [],
+                "retrieval_status": {
+                    self.name: {"status": "skipped", "reason": "empty query"}
+                },
+            }
 
         try:
             from knowledge.utils.embedding_utils import generate_hybrid_embeddings
@@ -75,7 +80,12 @@ class SearchEmbeddingNode(BaseNode):
         except Exception as exc:
             # 多路召回中的单一路故障不应拖垮整个问答流程。
             self.logger.warning("直接向量检索降级为空结果: %s", exc, exc_info=True)
-            return {"embedding_chunks": []}
+            return {
+                "embedding_chunks": [],
+                "retrieval_status": {
+                    self.name: {"status": "error", "reason": str(exc)[:500]}
+                },
+            }
 
     @staticmethod
     def _build_filter_expr(item_names: Optional[List[str]]) -> Optional[str]:

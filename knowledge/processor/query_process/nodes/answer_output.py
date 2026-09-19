@@ -89,7 +89,7 @@ class AnswerOutputNode(BaseNode):
         try:
             from knowledge.utils.llm_utils import get_llm_client
 
-            llm_client = get_llm_client()
+            llm_client = get_llm_client(trace_id=state.get("task_id", ""))
         except Exception as exc:
             self.logger.error("LLM 客户端初始化失败: %s", exc)
             state["answer"] = "抱歉，LLM 客户端初始化失败，暂时无法生成回答。"

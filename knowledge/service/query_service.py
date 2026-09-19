@@ -52,10 +52,17 @@ class QueryService:
         user_query: str,
         is_stream: bool,
         item_names: List[str] | None = None,
+        include_evaluation_trace: bool = False,
     ) -> Dict[str, Any]:
         """执行 LangGraph 查询流程。"""
 
         started_at = time.perf_counter()
+        from knowledge.observability.model_usage import (
+            begin_model_trace,
+            finish_model_trace,
+        )
+
+        begin_model_trace(task_id)
         try:
             from knowledge.processor.query_process.main_graph import run_query
 
@@ -66,6 +73,7 @@ class QueryService:
                 is_stream=is_stream,
                 task_id=task_id,
             )
+            final_state["model_usage"] = finish_model_trace(task_id)
             answer = str(final_state.get("answer", "") or "")
             image_urls = list(final_state.get("image_urls") or [])
             sources = list(final_state.get("sources") or []) or self._build_sources(
@@ -75,6 +83,7 @@ class QueryService:
                 task_id,
                 final_state,
                 elapsed=time.perf_counter() - started_at,
+                include_retrieval_trace=include_evaluation_trace,
             )
             set_task_result(task_id, "answer", answer)
             set_task_result(task_id, "image_urls", image_urls)
@@ -95,6 +104,7 @@ class QueryService:
                 )
             return final_state
         except Exception as exc:
+            model_usage = finish_model_trace(task_id)
             error_text = str(exc)
             self.logger.error("查询流程执行失败: %s", error_text, exc_info=True)
             set_task_result(task_id, "error", error_text)
@@ -106,6 +116,7 @@ class QueryService:
                     "retrieval_counts": {},
                     "node_timings": {},
                     "total_time": round(time.perf_counter() - started_at, 3),
+                    "model_usage": model_usage,
                 },
             )
             update_task_status(task_id, TASK_STATUS_FAILED)
@@ -168,8 +179,14 @@ class QueryService:
         task_id: str,
         state: Dict[str, Any],
         elapsed: float,
+        include_retrieval_trace: bool = False,
     ) -> Dict[str, Any]:
-        return build_query_diagnostics(task_id, state, elapsed)
+        return build_query_diagnostics(
+            task_id,
+            state,
+            elapsed,
+            include_retrieval_trace=include_retrieval_trace,
+        )
 
     @staticmethod
     def _format_history_record(record: Dict[str, Any]) -> Dict[str, Any]:

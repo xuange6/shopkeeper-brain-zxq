@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 from typing import Any
 
 try:
@@ -13,7 +14,7 @@ except ModuleNotFoundError:
 
 
 if load_dotenv:
-    load_dotenv()
+    load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
 
 
 logger = logging.getLogger(__name__)

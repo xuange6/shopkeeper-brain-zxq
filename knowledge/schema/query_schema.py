@@ -44,6 +44,7 @@ class QueryDiagnostics(BaseModel):
     retrieval_counts: Dict[str, int] = Field(default_factory=dict)
     node_timings: Dict[str, float] = Field(default_factory=dict)
     total_time: Optional[float] = None
+    model_usage: Dict[str, object] = Field(default_factory=dict)
 
 
 class QueryResponse(BaseModel):
