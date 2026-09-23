@@ -1,11 +1,13 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "2.0",
   "metric_max_drop": {
     "recall@5": 0.0,
     "precision@5": 0.0,
     "mrr": 0.0,
     "ndcg@5": 0.0,
     "citation_correctness": 0.0,
+    "answer_correctness": 0.0,
+    "image_accuracy": 0.0,
     "faithfulness": 0.0,
     "behavior_accuracy": 0.0,
     "safety": 0.0

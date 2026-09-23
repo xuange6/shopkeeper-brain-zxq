@@ -232,24 +232,26 @@
       }
 
       function isImageUrl(raw) {
-        try { return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(new URL(raw, location.href).pathname); }
-        catch (_) { return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/i.test(raw ?? ''); }
+        try {
+          const parsed = new URL(raw);
+          return ['http:', 'https:'].includes(parsed.protocol) && !parsed.username && !parsed.password
+            && /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(parsed.pathname);
+        } catch (_) { return false; }
       }
 
       function parseAnswer(rawAnswer, candidateUrls = []) {
         let text = String(rawAnswer ?? '');
-        const urls = [];
         const marker = /【\s*图片\s*】|\[\s*图片\s*]/g;
         let match;
         let lastMarker = null;
         while ((match = marker.exec(text)) !== null) lastMarker = { index: match.index, length: match[0].length };
         if (lastMarker) {
-          const suffix = text.slice(lastMarker.index + lastMarker.length);
           text = text.slice(0, lastMarker.index).trimEnd();
-          urls.push(...(suffix.match(/https?:\/\/[^\s<>'"]+/g) || []));
         }
-        urls.push(...(String(rawAnswer ?? '').match(/https?:\/\/[^\s<>'"]+/g) || []));
-        if (Array.isArray(candidateUrls)) urls.push(...candidateUrls);
+        // The server has verified this list against cited source assets. Never
+        // infer image requests from model prose, including streaming deltas or
+        // old history without structured assets. An empty list is authoritative.
+        const urls = Array.isArray(candidateUrls) ? candidateUrls.filter(url => typeof url === 'string') : [];
         const images = [...new Set(urls.map(cleanUrl).filter(isImageUrl))];
         return { text, images };
       }

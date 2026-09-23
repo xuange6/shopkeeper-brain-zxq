@@ -47,7 +47,7 @@ jobs:
         run: python -m unittest discover -s tests -v
 
       - name: Run deterministic contract gate
-        run: python scripts/run_evaluation.py --provider contract --baseline evaluation/baselines/stage0-contract.core.json --output evaluation/results/ci.json
+        run: python scripts/run_evaluation.py --provider contract --output evaluation/results/ci.json
 
       - name: Upload evaluation report
         if: always()

@@ -1,0 +1,15 @@
+[
+  [
+    {"type":"title","content":{"title_content":[{"type":"text","content":"警告"}],"level":1},"bbox":[50,40,900,90]},
+    {"type":"paragraph","content":{"paragraph_content":[{"type":"text","content":"打开设备前等待加热部件冷却。"}]},"bbox":[50,100,900,160]},
+    {"type":"list","content":{"list_items":[{"item_content":[{"type":"text","content":"确认锁定指示灯熄灭。"}]}]},"bbox":[50,170,900,230]},
+    {"type":"image","content":{"image_source":{"path":"images/front.png"},"content":"前盖开启示意图"},"bbox":[100,240,800,400]},
+    {"type":"paragraph","content":{"paragraph_content":[{"type":"text","content":"双手取出堵塞的纸张。"}]},"bbox":[50,420,900,480]},
+    {"type":"image","content":{"image_source":{"path":"images/empty.png"},"content":""},"bbox":[100,500,800,700]}
+  ],
+  [
+    {"type":"paragraph","content":{"paragraph_content":[{"type":"text","content":"关闭前盖。"}]},"bbox":[50,100,900,160]},
+    {"type":"title","content":{"title_content":[{"type":"text","content":"警告"}],"level":1},"bbox":[50,200,900,250]},
+    {"type":"paragraph","content":{"paragraph_content":[{"type":"text","content":"清洗时不要接触电路板。"}]},"bbox":[50,270,900,330]}
+  ]
+]

@@ -41,8 +41,16 @@ class AnswerOutputNode(BaseNode):
                 state["prompt"] = prompt
                 self._generate_answer(state, prompt)
 
-        state["image_urls"] = self._extract_image_urls(state.get("answer", ""))
         state["sources"] = build_source_references(state.get("reranked_docs") or [])
+        proposed_images = self._extract_image_urls(state.get("answer", ""))
+        cited_indices = {int(value) for value in re.findall(r"\[(\d+)\]", state.get("answer", ""))}
+        supported_images = {
+            url for source in state["sources"] if source["index"] in cited_indices
+            for url in source.get("image_urls", [])
+        }
+        state["image_urls"] = [url for url in proposed_images if url in supported_images]
+        if len(state["image_urls"]) != len(proposed_images):
+            self.logger.warning("Omitted %d image references without cited source assets", len(proposed_images) - len(state["image_urls"]))
 
         # 3. 写入历史会话，保存用户问题和助手回答。
         self._write_history(state)

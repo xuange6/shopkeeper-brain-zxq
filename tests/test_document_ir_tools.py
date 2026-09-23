@@ -20,6 +20,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "document_ir"
 @dataclass
 class _FixtureConfig:
     chunks_collection: str = "current_fixture"
+    minio_bucket: str = ""
 
 
 @contextmanager
@@ -28,9 +29,25 @@ def _isolated_services():
     config = Mock(return_value=_FixtureConfig())
     embedding = Mock()
     indexing = Mock()
+    enrichment = Mock()
+
+    def enrich(state):
+        from knowledge.document_ir.indexing import chunks_to_index_rows
+
+        document = state["document_ir"]
+        document.metadata["enrichment"] = {"uploaded_image_count": 0}
+        state["chunks"] = chunks_to_index_rows(document, item_name=state["item_name"])
+        return state
+
+    enrichment.return_value.process.side_effect = enrich
+    embedding.return_value.process.side_effect = lambda state: state
     modules = {}
     for name, attribute, value in (
         ("knowledge.processor.import_process.config", "get_config", config),
+        (
+            "knowledge.processor.import_process.nodes.document_enrich_node",
+            "DocumentEnrichNode", enrichment,
+        ),
         (
             "knowledge.processor.import_process.nodes.bge_embedding_chunks_node",
             "BgeEmbeddingNode", embedding,

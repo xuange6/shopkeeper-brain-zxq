@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import time
 import urllib.error
 import urllib.request
@@ -17,6 +18,24 @@ class EvaluationProvider(Protocol):
     def run(self, case: Dict[str, Any], attempt: int = 1) -> Dict[str, Any]: ...
 
 
+def contract_query_config():
+    """Fixed offline inputs: developer .env values never affect CI contracts."""
+    from knowledge.processor.query_process.config import QueryConfig
+
+    return QueryConfig(
+        max_context_chars=12000, rerank_max_top_k=15, rerank_min_top_k=6,
+        rerank_gap_ratio=0.25, rerank_gap_abs=0.5, refusal_min_score=0.3,
+        rrf_k=60, rrf_kg_weight=0.7, rrf_max_results=20,
+        embedding_search_limit=10, hyde_search_limit=10,
+        kg_entity_align_min_score=None, openai_api_base="", openai_api_key="",
+        default_model="offline-contract", item_model="offline-contract",
+        milvus_url="", chunks_collection="offline-contract",
+        item_name_collection="offline-contract", entity_name_collection="offline-contract",
+        neo4j_uri="", neo4j_username="", neo4j_password="", neo4j_database="offline-contract",
+        mcp_dashscope_base_url="",
+    )
+
+
 class ReplayProvider:
     name = "replay"
     evaluation_scope = "recorded_output"
@@ -25,6 +44,9 @@ class ReplayProvider:
         self.snapshot_path = snapshot_path
         snapshot_rows = _read_jsonl(snapshot_path)
         self._results = {item["case_id"]: item for item in snapshot_rows}
+        if len(self._results) != len(snapshot_rows):
+            raise ValueError("replay snapshot contains duplicate case IDs")
+        self.snapshot_sha256 = hashlib.sha256(snapshot_path.read_bytes()).hexdigest()
         source_scopes = {
             str(item.get("evaluation_scope"))
             for item in snapshot_rows
@@ -104,7 +126,7 @@ class ContractProvider:
                 )
                 state["answer"] = _contract_answer(expected)
 
-            node = AnswerOutputNode(config=QueryConfig())
+            node = AnswerOutputNode(config=contract_query_config())
             final_state = node.process(state)
             response = {
                 "answer": final_state.get("answer", ""),
@@ -303,6 +325,9 @@ def _contract_docs(expected: Dict[str, Any]) -> list[Dict[str, Any]]:
         doc.setdefault("source", "local")
         doc.setdefault("chunk_id", f"contract-{index}")
         doc["content"] = fact_text or "评测契约证据"
+        if expected.get("requires_image"):
+            doc["image_urls"] = ["https://example.invalid/evaluation/control-panel.png"]
+            doc["content"] += "\n![control panel](https://example.invalid/evaluation/control-panel.png)"
         docs.append(doc)
     return docs
 
@@ -327,4 +352,5 @@ def _contract_answer(expected: Dict[str, Any]) -> str:
 def write_jsonl(path: Path, items: list[Dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     text = "".join(json.dumps(item, ensure_ascii=False) + "\n" for item in items)
-    path.write_text(text, encoding="utf-8")
+    with path.open("x", encoding="utf-8") as handle:
+        handle.write(text)

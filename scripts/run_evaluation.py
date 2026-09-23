@@ -30,8 +30,9 @@ from knowledge.evaluation.runner import (
 DEFAULT_DATASET = ROOT / "evaluation/datasets/shopkeeper_qa.v0.1.0.jsonl"
 DEFAULT_SNAPSHOT = ROOT / "evaluation/snapshots/stage0-current.core.jsonl"
 DEFAULT_BASELINE = ROOT / "evaluation/baselines/stage0-current.core.json"
-DEFAULT_CONTRACT_BASELINE = ROOT / "evaluation/baselines/stage0-contract.core.json"
+DEFAULT_CONTRACT_BASELINE = ROOT / "evaluation/baselines/stage1-contract-v2.core.json"
 DEFAULT_GATE = ROOT / "evaluation/gate.json"
+DEFAULT_CONTRACT_GATE = ROOT / "evaluation/contract_gate.v2.json"
 
 
 def parse_args() -> argparse.Namespace:
@@ -45,7 +46,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
     parser.add_argument("--snapshot", type=Path, default=DEFAULT_SNAPSHOT)
     parser.add_argument("--baseline", type=Path)
-    parser.add_argument("--gate-config", type=Path, default=DEFAULT_GATE)
+    parser.add_argument("--gate-config", type=Path)
+    parser.add_argument("--source-contract", type=Path, help="Reviewed, dataset-SHA-pinned evidence selectors.")
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     parser.add_argument("--timeout-seconds", type=float, default=120.0)
     parser.add_argument("--attempts", type=int, default=1)
@@ -78,6 +80,7 @@ def main() -> int:
         suite=args.suite,
         attempts=args.attempts,
         write_snapshot_path=_resolve(args.write_snapshot) if args.write_snapshot else None,
+        source_contract_path=_resolve(args.source_contract) if args.source_contract else None,
     )
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     output = _resolve(args.output) if args.output else ROOT / f"evaluation/results/{stamp}.{args.provider}.{args.suite}.json"
@@ -90,7 +93,8 @@ def main() -> int:
             else DEFAULT_BASELINE
         )
         baseline = json.loads(_resolve(baseline_path).read_text(encoding="utf-8"))
-        gate_config = json.loads(_resolve(args.gate_config).read_text(encoding="utf-8"))
+        gate_path = args.gate_config or (DEFAULT_CONTRACT_GATE if args.provider == "contract" else DEFAULT_GATE)
+        gate_config = json.loads(_resolve(gate_path).read_text(encoding="utf-8"))
         gate_failures = compare_with_baseline(report, baseline, gate_config)
         if args.provider in {"service", "http"} and not (
             baseline.get("baseline_eligibility") or {}

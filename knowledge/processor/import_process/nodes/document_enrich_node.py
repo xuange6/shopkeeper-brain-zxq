@@ -44,6 +44,10 @@ class DocumentEnrichNode(BaseNode):
         uploaded = self._upload_assets(document, image_blocks, trusted_directory)
         blocks_by_id = {block.id: block for block in document.blocks}
         for chunk in document.chunks:
+            # Rebuild the deterministic pre-enrichment context on retries.
+            # Otherwise the same chunk ID accumulates duplicate/stale URLs.
+            chunk.contextual_text = "\n".join([*chunk.title_path, chunk.text]).strip()
+            chunk.metadata.pop("images", None)
             assets = []
             for block_id in chunk.image_block_ids:
                 block = blocks_by_id.get(block_id)
@@ -63,14 +67,14 @@ class DocumentEnrichNode(BaseNode):
                     for asset in assets
                     if asset["uri"].startswith(("http://", "https://"))
                 )
-                if image_markdown:
+                if image_markdown and not chunk.contextual_text.endswith(image_markdown):
                     chunk.contextual_text = (
                         chunk.contextual_text.rstrip() + "\n\n" + image_markdown
                     )
 
         document.metadata["enrichment"] = {
             "name": "shopkeeper.asset_enrichment",
-            "version": "1.0",
+            "version": "1.1",
             "image_count": len(image_blocks),
             "table_count": len(table_blocks),
             "uploaded_image_count": uploaded,

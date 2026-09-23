@@ -33,5 +33,10 @@ def build_chunk_citation(document: DocumentIR, chunk: Chunk) -> dict[str, Any]:
             for block_id in chunk.block_ids
             if block_id in blocks_by_id and blocks_by_id[block_id].lineage_id
         ],
+        "images": [
+            {"block_id": block_id, "uri": blocks_by_id[block_id].image.uri}
+            for block_id in chunk.image_block_ids
+            if block_id in blocks_by_id and blocks_by_id[block_id].image is not None
+        ],
         "locations": locations,
     }

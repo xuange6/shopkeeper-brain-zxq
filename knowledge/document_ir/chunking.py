@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from knowledge.document_ir.adapters.table import cells_to_rows
 from knowledge.document_ir.ids import normalized_text, stable_id
 from knowledge.document_ir.models import (
     BlockType,
@@ -25,7 +26,7 @@ class ChunkingConfig:
     repeat_table_header: bool = True
 
 
-_ATOMIC_TYPES = {BlockType.TABLE, BlockType.IMAGE, BlockType.CODE, BlockType.FORMULA}
+_STANDALONE_TYPES = {BlockType.TABLE, BlockType.CODE, BlockType.FORMULA}
 _HEADING_TYPES = {BlockType.TITLE, BlockType.HEADING}
 
 
@@ -35,7 +36,9 @@ def chunk_document(
     """Attach deterministic chunks while preserving block-level grounding.
 
     The first pass follows document structure. Oversized chunks are split only
-    afterwards, and undersized peers merge only when their title paths match.
+    afterwards. Images stay with surrounding instructions on the same page and
+    in the same section; an image itself is never split. Repeated heading text
+    does not make two different sections interchangeable.
     """
 
     config = config or ChunkingConfig()
@@ -44,7 +47,7 @@ def chunk_document(
     for block in result.blocks:
         if block.content_layer == "furniture" or block.type in _HEADING_TYPES:
             continue
-        if not block.text.strip():
+        if not block.text.strip() and block.image is None:
             continue
         blocks_by_section.setdefault(block.section_id, []).append(block)
 
@@ -56,9 +59,10 @@ def chunk_document(
             pieces = _split_block(block, config)
             for piece_index, piece in enumerate(pieces):
                 piece_length = len(piece)
-                is_atomic = block.type in _ATOMIC_TYPES or len(pieces) > 1
+                is_atomic = block.type in _STANDALONE_TYPES or len(pieces) > 1
                 if current and (
                     is_atomic
+                    or _page_numbers(current[-1][0].provenance) != _page_numbers(block.provenance)
                     or current_length + 2 + piece_length > config.max_characters
                 ):
                     candidates.append(current)
@@ -75,7 +79,7 @@ def chunk_document(
 
     chunker_signature = stable_id(
         "cfg",
-        "shopkeeper.structure_aware/1.1",
+        "shopkeeper.structure_aware/1.2",
         config.max_characters,
         config.min_characters,
         config.overlap_characters,
@@ -91,7 +95,7 @@ def chunk_document(
     result.chunks = chunks
     result.metadata["chunker"] = {
         "name": "shopkeeper.structure_aware",
-        "version": "1.1",
+        "version": "1.2",
         "signature": chunker_signature,
         "max_characters": config.max_characters,
         "min_characters": config.min_characters,
@@ -103,37 +107,57 @@ def chunk_document(
 
 
 def _split_block(block: DocumentBlock, config: ChunkingConfig) -> list[str]:
+    if block.type == BlockType.IMAGE:
+        return [block.text]
     if len(block.text) <= config.max_characters:
         return [block.text]
     if block.type == BlockType.TABLE and block.table and block.table.cells:
-        rows: dict[int, list[str]] = {}
-        for cell in block.table.cells:
-            rows.setdefault(cell.row, []).append(cell.text)
-        lines = [" | ".join(rows[row]) for row in sorted(rows)]
-        if not lines:
-            return _semantic_split(block.text, config)
-        header = lines[0]
-        pieces: list[str] = []
-        current = header
-        for line in lines[1:]:
-            candidate = current + "\n" + line
-            if len(candidate) > config.max_characters and current != header:
-                pieces.append(current)
-                current = (header + "\n" + line) if config.repeat_table_header else line
-            else:
-                current = candidate
-        if current:
-            pieces.append(current)
-        return [piece for value in pieces for piece in _semantic_split(value, config)]
+        return _split_table(block, config)
     if block.type == BlockType.CODE:
         return _line_split(block.text, config.max_characters)
     return _semantic_split(block.text, config)
 
 
+def _split_table(block: DocumentBlock, config: ChunkingConfig) -> list[str]:
+    """Budget every row slice with its captions, units, and footnotes.
+
+    If shared context plus one row cannot fit, fall back to splitting the full
+    original block text, not a cells-only reconstruction. This preserves all
+    source information, but deliberately does not promise repeated context or
+    intact rows in that exceptional case.
+    """
+    table = block.table
+    lines = cells_to_rows(table.cells) if table else []
+    if not lines:
+        return _semantic_split(block.text, config)
+
+    def render(rows: list[str]) -> str:
+        return "\n".join(part for part in [*table.captions, *rows, *table.footnotes] if part)
+
+    header = lines[0]
+    if len(render([header])) > config.max_characters:
+        return _semantic_split(block.text, config)
+    for index, line in enumerate(lines[1:]):
+        row_context = [header, line] if config.repeat_table_header or index == 0 else [line]
+        if len(render(row_context)) > config.max_characters:
+            return _semantic_split(block.text, config)
+
+    pieces: list[str] = []
+    current = [header]
+    for line in lines[1:]:
+        if len(render([*current, line])) > config.max_characters:
+            pieces.append(render(current))
+            current = [header] if config.repeat_table_header else []
+        current.append(line)
+    if current:
+        pieces.append(render(current))
+    return pieces
+
+
 def _semantic_split(text: str, config: ChunkingConfig) -> list[str]:
     if len(text) <= config.max_characters:
         return [text]
-    units = [unit for unit in re.split(r"(?<=[。！？；.!?;])|\n+", text) if unit]
+    units = [unit for unit in re.split(r"(?<=[。！？；.!?;\n])", text) if unit]
     if len(units) <= 1:
         return _line_split(text, config.max_characters, config.overlap_characters)
     pieces: list[str] = []
@@ -150,7 +174,8 @@ def _semantic_split(text: str, config: ChunkingConfig) -> list[str]:
             current += unit
         else:
             pieces.append(current.strip())
-            overlap = current[-config.overlap_characters :] if config.overlap_characters else ""
+            overlap_length = min(config.overlap_characters, config.max_characters - len(unit))
+            overlap = current[-overlap_length:] if overlap_length > 0 else ""
             current = overlap + unit
     if current.strip():
         pieces.append(current.strip())
@@ -208,7 +233,9 @@ def _merge_peers(
         combined_length = len(current.text) + 2 + len(following.text)
         if (
             len(current.text) < config.min_characters
+            and current.section_id == following.section_id
             and current.title_path == following.title_path
+            and _page_numbers(current.provenance) == _page_numbers(following.provenance)
             and not current.table_block_ids
             and not current.image_block_ids
             and not following.table_block_ids
@@ -238,6 +265,10 @@ def _merge_peers(
 
 def _unique_ranges(blocks: list[DocumentBlock]) -> list[RawRange]:
     return _dedupe_models([block.raw_range for block in blocks if block.raw_range])
+
+
+def _page_numbers(provenance: list[Provenance]) -> frozenset[int]:
+    return frozenset(prov.page_number for prov in provenance if prov.page_number is not None)
 
 
 def _unique_provenance(blocks: list[DocumentBlock]) -> list[Provenance]:

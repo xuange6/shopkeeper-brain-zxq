@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Dict, List
+from urllib.parse import urlsplit
 
 
 _TRACE_FIELDS = {
@@ -58,6 +60,7 @@ def build_source_references(raw_docs: Any) -> List[Dict[str, Any]]:
                 "block_lineage_ids": block_lineage_ids,
                 "title_path": title_path,
                 "locations": list(citation.get("locations") or []),
+                "image_urls": source_image_urls(raw_doc),
                 "url": str(raw_doc.get("url") or ""),
                 "score": score,
                 "preview": content[:280] + ("…" if len(content) > 280 else ""),
@@ -98,8 +101,11 @@ def build_retrieval_trace(state: Dict[str, Any]) -> Dict[str, Any]:
                     "source": str(doc.get("source") or ("web" if stage == "web" else "local")),
                     "chunk_id": str(doc.get("stable_id") or doc.get("chunk_id") or doc.get("id") or ""),
                     "document_id": str(doc.get("document_id") or ""),
+                    "revision_id": str(doc.get("revision_id") or ""),
                     "section_id": str(doc.get("section_id") or ""),
                     "page_numbers": _json_list(doc.get("page_numbers")),
+                    "block_ids": _json_list(doc.get("block_ids")),
+                    "image_urls": source_image_urls(doc),
                     "file_title": str(doc.get("file_title") or ""),
                     "title": str(doc.get("title") or ""),
                     "parent_title": str(doc.get("parent_title") or ""),
@@ -151,6 +157,40 @@ def build_query_diagnostics(
     if include_retrieval_trace:
         diagnostics["retrieval_trace"] = build_retrieval_trace(state)
     return diagnostics
+
+
+def source_image_urls(doc: Dict[str, Any]) -> List[str]:
+    """Expose only asset references, never arbitrary links found in prose.
+
+    IR citations carry exact block-to-asset associations. Legacy rows have no
+    such field, so their Markdown image syntax is the compatibility boundary.
+    This does not fetch remote URLs or infer images from source/page URLs.
+    """
+    citation = _json_object(doc.get("citation"))
+    if "images" in citation:
+        values = [item.get("uri") for item in _json_list(citation.get("images")) if isinstance(item, dict)]
+    else:
+        values = list(_json_list(doc.get("image_urls")))
+        values.extend(re.findall(
+            r"!\[[^\]]*\]\(\s*<?(https?://[^\s<>\)]+)>?(?:\s+[^\)]*)?\)",
+            str(doc.get("content") or ""),
+        ))
+    result: List[str] = []
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        try:
+            parsed = urlsplit(value)
+            valid = (
+                parsed.scheme in {"http", "https"} and parsed.hostname
+                and not parsed.username and not parsed.password
+                and not any(character.isspace() for character in value)
+            )
+        except ValueError:
+            valid = False
+        if valid and value not in result:
+            result.append(value)
+    return result
 
 
 def _json_object(value: Any) -> Dict[str, Any]:

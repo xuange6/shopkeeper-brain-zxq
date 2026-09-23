@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import math
+import json
 import re
 import statistics
 from typing import Any, Dict, Iterable, List, Sequence
 
 
 _CITATION_PATTERN = re.compile(r"\[(\d+)]")
+EVALUATOR_VERSION = "2.0"
+_SCALAR_SOURCE_FIELDS = {
+    "source", "chunk_id", "file_title", "title", "parent_title", "url",
+    "document_id", "revision_id", "section_id", "source_uri",
+}
+_LIST_SOURCE_FIELDS = {"block_ids", "block_lineage_ids", "page_numbers", "page_uids", "title_path"}
 _REFUSAL_MARKERS = (
     "没有足够依据",
     "没有检索到足够",
@@ -36,21 +43,58 @@ def percentile(values: Sequence[float], percent: float) -> float:
     return ordered[lower] + (ordered[upper] - ordered[lower]) * (position - lower)
 
 
+def canonical_heading(value: Any) -> str:
+    """Ignore Markdown heading syntax, never section numbers or part suffixes."""
+    return re.sub(r"^#{1,6}\s+", "", str(value or "").strip()).strip()
+
+
 def _source_matches(actual: Dict[str, Any], expected: Dict[str, Any]) -> bool:
-    for field in ("source", "chunk_id", "file_title", "title", "parent_title", "url"):
-        wanted = str(expected.get(field) or "").strip()
-        if wanted and str(actual.get(field) or "").strip() != wanted:
-            return False
-    return any(str(expected.get(field) or "").strip() for field in expected)
+    if not expected or set(expected) - (_SCALAR_SOURCE_FIELDS | _LIST_SOURCE_FIELDS):
+        return False
+    constrained = False
+    for field, wanted in expected.items():
+        if field in _LIST_SOURCE_FIELDS:
+            if not isinstance(wanted, list) or not wanted:
+                return False
+            received = actual.get(field)
+            if not isinstance(received, list):
+                return False
+            # A path is ordered, whereas location/id lists express containment.
+            if field == "title_path":
+                if list(map(canonical_heading, received)) != list(map(canonical_heading, wanted)):
+                    return False
+            elif not all(value in received for value in wanted):
+                return False
+        else:
+            wanted = str(wanted or "").strip()
+            if not wanted:
+                return False
+            received = str(actual.get(field) or "").strip()
+            if field in {"title", "parent_title"}:
+                received, wanted = canonical_heading(received), canonical_heading(wanted)
+            if received != wanted:
+                return False
+        constrained = True
+    return constrained
+
+
+def _matches_with_aliases(actual: dict, expected: dict, contract: dict | None = None) -> bool:
+    aliases = [alias for alias in (contract or {}).get("source_aliases", []) if alias.get("expected") == expected]
+    # A reviewed mapping replaces ambiguous legacy labels, rather than adding
+    # permissive alternatives while silently retaining the ambiguous fallback.
+    if aliases:
+        return any(_source_matches(actual, alias.get("actual") or {}) for alias in aliases)
+    return _source_matches(actual, expected)
 
 
 def _relevant_indices(
-    sources: Sequence[Dict[str, Any]], expected_sources: Sequence[Dict[str, Any]]
+    sources: Sequence[Dict[str, Any]], expected_sources: Sequence[Dict[str, Any]],
+    contract: dict | None = None,
 ) -> set[int]:
     return {
         index
         for index, source in enumerate(sources)
-        if any(_source_matches(source, expected) for expected in expected_sources)
+        if any(_matches_with_aliases(source, expected, contract) for expected in expected_sources)
     }
 
 
@@ -58,6 +102,7 @@ def retrieval_metrics(
     sources: Sequence[Dict[str, Any]],
     expected_sources: Sequence[Dict[str, Any]],
     k: int = 5,
+    contract: dict | None = None,
 ) -> Dict[str, float]:
     if not expected_sources:
         return {
@@ -65,12 +110,38 @@ def retrieval_metrics(
         }
 
     top_sources = list(sources[:k])
-    relevant = _relevant_indices(top_sources, expected_sources)
-    recall = min(len(relevant) / len(expected_sources), 1.0)
+    relevant = _relevant_indices(top_sources, expected_sources, contract)
+    # Credit each expected evidence unit once. Incremental augmenting paths
+    # preserve the earliest possible ranks even when selectors overlap.
+    gold = list({json.dumps(item, sort_keys=True): item for item in expected_sources}.values())
+    assigned: dict[int, int] = {}
+    def assign(rank: int, visited: set[int]) -> bool:
+        for gold_index, expected in enumerate(gold):
+            if gold_index in visited or not _matches_with_aliases(top_sources[rank], expected, contract):
+                continue
+            visited.add(gold_index)
+            if gold_index not in assigned or assign(assigned[gold_index], visited):
+                assigned[gold_index] = rank
+                return True
+        return False
+    credited = []
+    seen_candidates: set[str] = set()
+    for rank, source in enumerate(top_sources):
+        if source.get("chunk_id"):
+            identity = (source.get("source", "local"), source.get("document_id", source.get("file_title", "")), source["chunk_id"])
+        elif source.get("url"):
+            identity = ("url", source["url"])
+        else:
+            identity = {key: value for key, value in source.items() if key in _SCALAR_SOURCE_FIELDS | _LIST_SOURCE_FIELDS}
+        key = json.dumps(identity, sort_keys=True)
+        if key not in seen_candidates and assign(rank, set()):
+            credited.append(rank)
+        seen_candidates.add(key)
+    recall = len(assigned) / len(gold)
     precision = len(relevant) / len(top_sources) if top_sources else 0.0
     mrr = 1.0 / (min(relevant) + 1) if relevant else 0.0
-    dcg = sum(1.0 / math.log2(index + 2) for index in relevant)
-    ideal_count = min(len(expected_sources), k)
+    dcg = sum(1.0 / math.log2(index + 2) for index in credited)
+    ideal_count = min(len(gold), k)
     ideal_dcg = sum(1.0 / math.log2(index + 2) for index in range(ideal_count))
     return {
         f"recall@{k}": round(recall, 6),
@@ -98,10 +169,12 @@ def _fact_is_cited(
     answer: str,
     fact: Dict[str, Any],
     sources: Sequence[Dict[str, Any]],
+    expected_sources: Sequence[Dict[str, Any]] = (),
+    contract: dict | None = None,
 ) -> bool:
     alternatives = [str(value) for value in fact.get("any", []) if str(value)]
     supporting_titles = {
-        str(value) for value in fact.get("source_titles", []) if str(value)
+        canonical_heading(value) for value in fact.get("source_titles", []) if str(value)
     }
     # Citations commonly follow Chinese sentence punctuation ("事实。[1]").
     # Attach such markers to the preceding clause before sentence splitting.
@@ -114,16 +187,26 @@ def _fact_is_cited(
             if not 1 <= citation <= len(sources):
                 continue
             source = sources[citation - 1]
+            if expected_sources and not any(
+                _matches_with_aliases(source, expected, contract) for expected in expected_sources
+            ):
+                continue
             source_titles = {
-                str(source.get("title") or ""),
-                str(source.get("parent_title") or ""),
+                canonical_heading(source.get("title")),
+                canonical_heading(source.get("parent_title")),
             }
             if not supporting_titles or source_titles & supporting_titles:
+                return True
+            if any(
+                canonical_heading(alias.get("expected_title")) in supporting_titles
+                and _source_matches(source, alias.get("actual") or {})
+                for alias in (contract or {}).get("fact_source_aliases", [])
+            ):
                 return True
     return False
 
 
-def answer_metrics(case: Dict[str, Any], response: Dict[str, Any]) -> Dict[str, float]:
+def answer_metrics(case: Dict[str, Any], response: Dict[str, Any], contract: dict | None = None) -> Dict[str, float]:
     expected = case.get("expected") or {}
     answer = str(response.get("answer") or "")
     sources = [item for item in response.get("sources") or [] if isinstance(item, dict)]
@@ -141,14 +224,14 @@ def answer_metrics(case: Dict[str, Any], response: Dict[str, Any]) -> Dict[str, 
     citations = [int(value) for value in _CITATION_PATTERN.findall(answer)]
     valid_citations = [value for value in citations if 1 <= value <= len(sources)]
     if expected.get("requires_citation"):
-        relevant = _relevant_indices(sources, expected.get("relevant_sources") or [])
+        relevant = _relevant_indices(sources, expected.get("relevant_sources") or [], contract)
         correct = [value for value in valid_citations if value - 1 in relevant]
         citation_correctness = len(correct) / len(citations) if citations else 0.0
     else:
         citation_correctness = 1.0 if len(valid_citations) == len(citations) else 0.0
 
     if facts and expected_behavior == "answer":
-        supported = sum(_fact_is_cited(answer, fact, sources) for fact in present_facts)
+        supported = sum(_fact_is_cited(answer, fact, sources, expected.get("relevant_sources") or [], contract) for fact in present_facts)
         faithfulness = supported / len(present_facts) if present_facts else 0.0
     else:
         faithfulness = behavior_accuracy
@@ -157,7 +240,14 @@ def answer_metrics(case: Dict[str, Any], response: Dict[str, Any]) -> Dict[str, 
     safety = float(not any(value and value.lower() in answer.lower() for value in forbidden))
     image_accuracy = 1.0
     if expected.get("requires_image"):
-        image_accuracy = float(bool(response.get("image_urls")))
+        returned_images = {image for image in response.get("image_urls") or [] if isinstance(image, str)}
+        evidence_images = {
+            image
+            for citation in valid_citations
+            for image in sources[citation - 1].get("image_urls") or []
+            if isinstance(image, str)
+        }
+        image_accuracy = float(bool(returned_images) and returned_images <= evidence_images)
 
     return {
         "behavior_accuracy": behavior_accuracy,
@@ -169,7 +259,7 @@ def answer_metrics(case: Dict[str, Any], response: Dict[str, Any]) -> Dict[str, 
     }
 
 
-def evaluate_case(case: Dict[str, Any], raw_result: Dict[str, Any]) -> Dict[str, Any]:
+def evaluate_case(case: Dict[str, Any], raw_result: Dict[str, Any], contract: dict | None = None) -> Dict[str, Any]:
     response = raw_result.get("response") or {}
     expected = case.get("expected") or {}
     scope = str(raw_result.get("evaluation_scope") or "unknown")
@@ -200,14 +290,14 @@ def evaluate_case(case: Dict[str, Any], raw_result: Dict[str, Any]) -> Dict[str,
     metrics: Dict[str, float] = {}
     if scope == "full_pipeline" and isinstance(stages, dict):
         final_candidates = stages.get("rerank") or []
-        metrics.update(retrieval_metrics(final_candidates, expected_sources, k=k))
+        metrics.update(retrieval_metrics(final_candidates, expected_sources, k=k, contract=contract))
         if expected_sources:
             for stage in ("direct", "hyde", "knowledge_graph", "web", "rrf", "rerank"):
                 stage_metrics = retrieval_metrics(
-                    stages.get(stage) or [], expected_sources, k=k
+                    stages.get(stage) or [], expected_sources, k=k, contract=contract
                 )
                 metrics[f"{stage}_recall@{k}"] = stage_metrics[f"recall@{k}"]
-    metrics.update(answer_metrics(case, response))
+    metrics.update(answer_metrics(case, response, contract))
 
     if scope == "full_pipeline":
         metrics["pipeline_complete"] = _pipeline_complete(case, response, trace)

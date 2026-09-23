@@ -244,6 +244,26 @@ class DocumentIRAssetSafetyTests(unittest.TestCase):
             self.assertEqual(client.fput_object.call_args.args[2], str(image.resolve()))
             self.assertEqual(result["document_ir"].metadata["enrichment"]["uploaded_image_count"], 1)
 
+    def test_enrichment_retry_keeps_stable_context_and_replaces_stale_links(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "diagram.png").write_bytes(_IMAGE_BYTES)
+            source = self._markdown(root, "diagram.png")
+            document = chunk_document(normalize_document(MarkdownAdapter().convert(source)))
+            node = DocumentEnrichNode(config=ImportConfig(
+                minio_bucket="test-assets", minio_endpoint="storage.example.invalid"
+            ))
+            with patch(_ENRICH_CLIENT, return_value=Mock()):
+                result = node.process({"document_ir": document, "file_dir": str(root)})
+                first = result["document_ir"].model_dump()
+                second = node.process(result)["document_ir"].model_dump()
+                self.assertEqual(first, second)
+                node.config.minio_endpoint = "replacement.example.invalid"
+                updated = node.process(result)["document_ir"]
+            self.assertEqual([c.id for c in document.chunks], [c.id for c in updated.chunks])
+            self.assertTrue(any("replacement.example.invalid" in c.contextual_text for c in updated.chunks))
+            self.assertTrue(all("storage.example.invalid" not in c.contextual_text for c in updated.chunks))
+
 
 if __name__ == "__main__":
     unittest.main()
