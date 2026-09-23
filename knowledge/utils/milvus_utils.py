@@ -31,6 +31,27 @@ def get_milvus_client() -> MilvusClient:
     return MilvusClient(uri=milvus_url)
 
 
+def supported_output_fields(
+    client: MilvusClient, collection_name: str, requested: List[str]
+) -> List[str]:
+    """Request only fields declared by the selected Milvus collection.
+
+    The stage-0 collection lacks stage-1 provenance fields. Asking Milvus for a
+    nonexistent field aborts the whole hybrid search rather than omitting it.
+    """
+
+    description = client.describe_collection(collection_name=collection_name)
+    declared = {
+        str(field.get("name"))
+        for field in description.get("fields", [])
+        if isinstance(field, dict) and field.get("name")
+    }
+    fields = [field for field in requested if field in declared]
+    if "chunk_id" not in fields or "content" not in fields:
+        raise ValueError(f"collection {collection_name} lacks required retrieval fields")
+    return fields
+
+
 def build_hybrid_search_requests(
     dense_vector: List[float],
     sparse_vector: Dict[int, float],

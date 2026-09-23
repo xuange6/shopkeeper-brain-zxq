@@ -8,11 +8,13 @@ from langgraph.graph import END, START, StateGraph
 from knowledge.processor.import_process.base import setup_logging
 from knowledge.processor.import_process.nodes.bge_embedding_chunks_node import BgeEmbeddingNode
 from knowledge.processor.import_process.nodes.document_spliter_node import DocumentSplitNode
+from knowledge.processor.import_process.nodes.document_enrich_node import DocumentEnrichNode
+from knowledge.processor.import_process.nodes.document_normalize_node import DocumentNormalizeNode
+from knowledge.processor.import_process.nodes.document_parse_node import DocumentParseNode
 from knowledge.processor.import_process.nodes.entry_node import EntryNode
 from knowledge.processor.import_process.nodes.import_milvus import ImportMilvusNode
 from knowledge.processor.import_process.nodes.item_name_recognition_load import ItemNameRecognitionNode
 from knowledge.processor.import_process.nodes.kg_graph_node import KnowledgeGraphNode
-from knowledge.processor.import_process.nodes.md_img_node import MarkDownImageNode
 from knowledge.processor.import_process.nodes.pdf_to_md_node import PdfToMdNode
 from knowledge.processor.import_process.state import ImportGraphState, create_default_state
 
@@ -122,7 +124,7 @@ def _should_dump_full_state() -> bool:
 
 def import_router(state: ImportGraphState):
     if state.get("is_md_read_enabled"):
-        return "md_img_node"
+        return "document_parse_node"
     if state.get("is_pdf_read_enabled"):
         return "pdf_to_md_node"
     return END
@@ -140,8 +142,10 @@ def create_import_graph():
     nodes = {
         "entry_node": EntryNode(),
         "pdf_to_md_node": PdfToMdNode(),
-        "md_img_node": MarkDownImageNode(),
+        "document_parse_node": DocumentParseNode(),
+        "document_normalize_node": DocumentNormalizeNode(),
         "document_split_node": DocumentSplitNode(),
+        "document_enrich_node": DocumentEnrichNode(),
         "item_name_recognition_node": ItemNameRecognitionNode(),
         "bge_embedding_node": BgeEmbeddingNode(),
         "import_milvus_node": ImportMilvusNode(),
@@ -155,14 +159,16 @@ def create_import_graph():
         "entry_node",
         import_router,
         {
-            "md_img_node": "md_img_node",
+            "document_parse_node": "document_parse_node",
             "pdf_to_md_node": "pdf_to_md_node",
             END: END,
         },
     )
-    graph_pipeline.add_edge("pdf_to_md_node", "md_img_node")
-    graph_pipeline.add_edge("md_img_node", "document_split_node")
-    graph_pipeline.add_edge("document_split_node", "item_name_recognition_node")
+    graph_pipeline.add_edge("pdf_to_md_node", "document_parse_node")
+    graph_pipeline.add_edge("document_parse_node", "document_normalize_node")
+    graph_pipeline.add_edge("document_normalize_node", "document_split_node")
+    graph_pipeline.add_edge("document_split_node", "document_enrich_node")
+    graph_pipeline.add_edge("document_enrich_node", "item_name_recognition_node")
     graph_pipeline.add_edge("item_name_recognition_node", "bge_embedding_node")
     graph_pipeline.add_edge("bge_embedding_node", "import_milvus_node")
     graph_pipeline.add_conditional_edges(
@@ -181,11 +187,19 @@ def create_import_graph():
 graph_app = create_import_graph()
 
 
-def run_import_graph(import_file_path: str, file_dir: str, task_id: str = ""):
+def run_import_graph(
+    import_file_path: str,
+    file_dir: str,
+    task_id: str = "",
+    logical_document_key: str = "",
+    previous_ir_path: str = "",
+):
     init_state = create_default_state(
         task_id=task_id,
         import_file_path=import_file_path,
         file_dir=file_dir,
+        logical_document_key=logical_document_key,
+        previous_ir_path=previous_ir_path,
     )
     final_state = None
 
@@ -205,8 +219,9 @@ def run_import_graph(import_file_path: str, file_dir: str, task_id: str = ""):
 def main() -> None:
     setup_logging()
 
-    default_pdf_path = Path(__file__).resolve().parent / "import_temp_Dir" / "hak180使用说明书.pdf"
-    import_file_path = os.getenv("IMPORT_GRAPH_TEST_FILE", str(default_pdf_path))
+    import_file_path = os.getenv("IMPORT_GRAPH_TEST_FILE", "").strip()
+    if not import_file_path:
+        raise SystemExit("Set IMPORT_GRAPH_TEST_FILE to the document you intend to import")
     file_dir = os.getenv("IMPORT_GRAPH_TEST_DIR", str(Path(import_file_path).parent))
 
     final_state = run_import_graph(import_file_path=import_file_path, file_dir=file_dir)

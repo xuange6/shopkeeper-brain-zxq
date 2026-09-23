@@ -34,6 +34,13 @@ dist/
 logs/
 *.log
 evaluation/results/
+/output/
+/tmp/
+# Local Stage-1 service transcripts and detailed validation records are private.
+/evaluation/snapshots/stage1-*.jsonl
+/evaluation/baselines/STAGE0_SHA_AUDIT.md
+/docs/roadmap/STAGE1_DOCUMENT_IR.md
+/docs/roadmap/STAGE1_VALIDATION.md
 .tmp_upload_test/
 docs/.edge-*/
 docs/images/chat-mobile-preview.png

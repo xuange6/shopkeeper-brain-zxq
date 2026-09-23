@@ -4,7 +4,7 @@
 定义完整的状态结构和辅助函数
 """
 
-from typing import TypedDict, List, Dict, Tuple
+from typing import Any, TypedDict, List, Dict, Tuple
 import copy
 
 
@@ -42,6 +42,16 @@ class ImportGraphState(TypedDict, total=False):
     image_contexts: List[Tuple[str, str, Tuple[str, str, str]]]  # 图片上下文列表
     image_summaries: Dict[str, str]  # 图片摘要列表
     chunks: List  # 文档切片列表
+    document_ir: Any  # parser-neutral DocumentIR runtime object
+    document_id: str
+    logical_document_key: str
+    previous_ir_path: str
+    revision_id: str
+    parse_status: str
+    parse_errors: List[Dict]
+    parse_action: str
+    parse_attempts: int
+    ir_path: str
     node_timings: Dict[str, float]  # 每个节点的耗时（秒）
 
 
@@ -60,6 +70,16 @@ GRAPH_DEFAULT_STATE: ImportGraphState = {
     "image_contexts": [],
     "image_summaries": {},
     "chunks": [],
+    "document_ir": None,
+    "document_id": "",
+    "logical_document_key": "",
+    "previous_ir_path": "",
+    "revision_id": "",
+    "parse_status": "pending",
+    "parse_errors": [],
+    "parse_action": "stop",
+    "parse_attempts": 0,
+    "ir_path": "",
     "node_timings": {},
     "item_name": "",
 }

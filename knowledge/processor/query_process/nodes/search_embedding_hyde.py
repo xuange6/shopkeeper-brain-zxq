@@ -26,6 +26,20 @@ class SearchEmbeddingHydeNode(BaseNode):
         "parent_title",
         "file_title",
         "part",
+        "stable_id",
+        "document_id",
+        "revision_id",
+        "source_uri",
+        "section_id",
+        "block_ids",
+        "title_path",
+        "page_numbers",
+        "citation",
+        "parser_name",
+        "parser_version",
+        "ir_schema_version",
+        "has_table",
+        "has_image",
     ]
 
     def process(self, state: QueryGraphState) -> QueryGraphState:
@@ -81,6 +95,7 @@ class SearchEmbeddingHydeNode(BaseNode):
             build_hybrid_search_requests,
             execute_hybrid_search,
             get_milvus_client,
+            supported_output_fields,
         )
 
         combined_text = f"{query} {hyde_doc}".strip()
@@ -97,14 +112,16 @@ class SearchEmbeddingHydeNode(BaseNode):
             top_k=self.config.hyde_search_limit,
         )
 
+        collection_name = self.config.chunks_collection or "chunks_test"
+        client = get_milvus_client()
         res = execute_hybrid_search(
-            client=get_milvus_client(),
-            collection_name=self.config.chunks_collection or "chunks_test",
+            client=client,
+            collection_name=collection_name,
             search_requests=reqs,
             ranker_weights=self.RANKER_WEIGHTS,
             normalize_score=True,
             top_k=self.config.hyde_search_limit,
-            output_fields=self.OUTPUT_FIELDS,
+            output_fields=supported_output_fields(client, collection_name, self.OUTPUT_FIELDS),
         )
 
         return res[0] if res else []

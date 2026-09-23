@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, List
 
 
@@ -32,6 +33,13 @@ def build_source_references(raw_docs: Any) -> List[Dict[str, Any]]:
         except (TypeError, ValueError):
             score = None
 
+        citation = _json_object(raw_doc.get("citation"))
+        stable_id = raw_doc.get("stable_id") or raw_doc.get("chunk_id")
+        pages = citation.get("page_numbers") or _json_list(raw_doc.get("page_numbers"))
+        block_ids = citation.get("block_ids") or _json_list(raw_doc.get("block_ids"))
+        block_lineage_ids = citation.get("block_lineage_ids") or _json_list(raw_doc.get("block_lineage_ids"))
+        page_uids = citation.get("page_uids") or _json_list(raw_doc.get("page_uids"))
+        title_path = citation.get("title_path") or _json_list(raw_doc.get("title_path"))
         sources.append(
             {
                 "index": len(sources) + 1,
@@ -39,7 +47,17 @@ def build_source_references(raw_docs: Any) -> List[Dict[str, Any]]:
                 "title": str(raw_doc.get("title") or ""),
                 "file_title": str(raw_doc.get("file_title") or ""),
                 "parent_title": str(raw_doc.get("parent_title") or ""),
-                "chunk_id": str(raw_doc.get("chunk_id") or ""),
+                "chunk_id": str(stable_id or ""),
+                "document_id": str(raw_doc.get("document_id") or citation.get("document_id") or ""),
+                "revision_id": str(raw_doc.get("revision_id") or citation.get("revision_id") or ""),
+                "source_uri": str(raw_doc.get("source_uri") or citation.get("source_uri") or ""),
+                "section_id": str(raw_doc.get("section_id") or citation.get("section_id") or ""),
+                "page_numbers": pages,
+                "page_uids": page_uids,
+                "block_ids": block_ids,
+                "block_lineage_ids": block_lineage_ids,
+                "title_path": title_path,
+                "locations": list(citation.get("locations") or []),
                 "url": str(raw_doc.get("url") or ""),
                 "score": score,
                 "preview": content[:280] + ("…" if len(content) > 280 else ""),
@@ -78,7 +96,10 @@ def build_retrieval_trace(state: Dict[str, Any]) -> Dict[str, Any]:
                 {
                     "rank": len(refs) + 1,
                     "source": str(doc.get("source") or ("web" if stage == "web" else "local")),
-                    "chunk_id": str(doc.get("chunk_id") or doc.get("id") or ""),
+                    "chunk_id": str(doc.get("stable_id") or doc.get("chunk_id") or doc.get("id") or ""),
+                    "document_id": str(doc.get("document_id") or ""),
+                    "section_id": str(doc.get("section_id") or ""),
+                    "page_numbers": _json_list(doc.get("page_numbers")),
                     "file_title": str(doc.get("file_title") or ""),
                     "title": str(doc.get("title") or ""),
                     "parent_title": str(doc.get("parent_title") or ""),
@@ -130,3 +151,27 @@ def build_query_diagnostics(
     if include_retrieval_trace:
         diagnostics["retrieval_trace"] = build_retrieval_trace(state)
     return diagnostics
+
+
+def _json_object(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(str(value))
+        return parsed if isinstance(parsed, dict) else {}
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+
+
+def _json_list(value: Any) -> List[Any]:
+    if isinstance(value, list):
+        return value
+    if not value:
+        return []
+    try:
+        parsed = json.loads(str(value))
+        return parsed if isinstance(parsed, list) else []
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []

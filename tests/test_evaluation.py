@@ -26,6 +26,7 @@ from knowledge.processor.query_process.config import QueryConfig
 from knowledge.processor.query_process.nodes.item_name_confirm import ItemNameConfirmNode
 from knowledge.processor.query_process.state import create_default_state
 from knowledge.utils.query_result_utils import build_retrieval_trace
+from scripts.audit_stage1_evaluation_compat import canonical_title, normalized_case
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,6 +34,22 @@ DATASET = ROOT / "evaluation/datasets/shopkeeper_qa.v0.1.0.jsonl"
 
 
 class EvaluationTests(unittest.TestCase):
+    def test_stage1_title_compat_diagnostic_does_not_mutate_dataset(self) -> None:
+        self.assertEqual(canonical_title("# 1.2 示例简介"), "1.2 示例简介")
+        self.assertEqual(
+            canonical_title("# 8.2.2 示例问题-2"), "8.2.2 示例问题"
+        )
+        self.assertEqual(canonical_title("EXAMPLE-100"), "EXAMPLE-100")
+        original = {
+            "expected": {
+                "relevant_sources": [{"file_title": "manual", "parent_title": "# 警告"}],
+                "facts": [{"source_titles": ["# 警告"]}],
+            }
+        }
+        normalized = normalized_case(original)
+        self.assertEqual(normalized["expected"]["relevant_sources"][0]["title"], "警告")
+        self.assertEqual(original["expected"]["relevant_sources"][0]["parent_title"], "# 警告")
+
     def test_dataset_is_versioned_unique_and_covers_required_risks(self) -> None:
         cases = load_dataset(DATASET)
         self.assertEqual(len(cases), len({case["id"] for case in cases}))

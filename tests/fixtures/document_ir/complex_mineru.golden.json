@@ -1,0 +1,28 @@
+{
+  "block_count": 13,
+  "block_types": [
+    "title",
+    "paragraph",
+    "paragraph",
+    "image",
+    "page_footer",
+    "heading",
+    "table",
+    "paragraph",
+    "table",
+    "paragraph",
+    "page_number",
+    "heading",
+    "image"
+  ],
+  "chunk_count": 7,
+  "document_id": "doc_",
+  "image_pages": [1, 4],
+  "ocr_texts": ["启动 停止 急停", "OCR：高温危险，请佩戴防护手套。"],
+  "parser": "mineru",
+  "schema_version": "1.1.0",
+  "section_paths": [[], ["工业设备手册"], ["工业设备手册", "介质规格"], ["工业设备手册", "扫描页"]],
+  "status": "success",
+  "table_pages": [2, 3],
+  "tables_linked": true
+}

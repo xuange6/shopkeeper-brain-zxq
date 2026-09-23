@@ -18,12 +18,12 @@
 6. 保存商品名到 Milvus
 """
 
+import json
 from typing import List, Optional, Tuple
 
 from pymilvus import DataType
 
 from knowledge.processor.import_process.base import BaseNode
-from knowledge.processor.import_process.config import get_config
 from knowledge.processor.import_process.state import ImportGraphState
 from knowledge.processor.import_process.exceptions import ValidationError
 from knowledge.utils.embedding_utils import get_bge_m3_model
@@ -60,7 +60,7 @@ class ItemNameRecognitionNode(BaseNode):
         - Step 5：生成商品名向量
         - Step 6：保存到 Milvus
         """
-        config = get_config()
+        config = self.config
 
         file_title, chunks = self._validate_inputs(state)
         context = self._build_context(chunks, config.item_name_chunk_k)
@@ -269,15 +269,30 @@ class ItemNameRecognitionNode(BaseNode):
             collection_name = config.item_name_collection
 
             if not client.has_collection(collection_name=collection_name):
-                self._create_item_name_collection(client, collection_name)
+                self._create_item_name_collection(
+                    client,
+                    collection_name,
+                    vector_dim=config.embedding_dim,
+                )
 
             data = {
+                "document_id": str(state.get("document_id") or ""),
                 "file_title": file_title,
                 "item_name": item_name,
                 "dense_vector": dense_vector,
                 "sparse_vector": normalize_sparse_vector(sparse_vector),
             }
 
+            # A filename is not a document identity. Never delete another
+            # document's item projection merely because its title is the same.
+            document_id = data["document_id"]
+            if document_id:
+                client.delete(
+                    collection_name=collection_name,
+                    filter=f"document_id == {json.dumps(document_id)}",
+                )
+            else:
+                self.logger.warning("legacy item projection has no document identity; skipping replacement")
             result = client.insert(collection_name=collection_name, data=[data])
             ids = result.get("ids", [])
             self.logger.info(f"已保存到 Milvus，ID: {ids[0] if ids else '未知'}")
@@ -287,7 +302,9 @@ class ItemNameRecognitionNode(BaseNode):
         except Exception as e:
             self.logger.warning(f"Milvus 保存失败: {e}")
 
-    def _create_item_name_collection(self, client, collection_name: str):
+    def _create_item_name_collection(
+        self, client, collection_name: str, *, vector_dim: int
+    ):
         """
         创建商品名集合。
 
@@ -304,6 +321,11 @@ class ItemNameRecognitionNode(BaseNode):
             max_length=100,
         )
         schema.add_field(
+            field_name="document_id",
+            datatype=DataType.VARCHAR,
+            max_length=128,
+        )
+        schema.add_field(
             field_name="file_title",
             datatype=DataType.VARCHAR,
             max_length=65535,
@@ -316,7 +338,7 @@ class ItemNameRecognitionNode(BaseNode):
         schema.add_field(
             field_name="dense_vector",
             datatype=DataType.FLOAT_VECTOR,
-            dim=1024,
+            dim=vector_dim,
         )
         schema.add_field(
             field_name="sparse_vector",
@@ -357,14 +379,10 @@ if __name__ == "__main__":
 
     setup_logging()
 
-    default_chunks_path = (
-            Path(__file__).resolve().parents[1]
-            / "import_temp_Dir"
-            / "hak180使用说明书"
-            / "hybrid_auto"
-            / "chunks.json"
-    )
-    chunks_path = Path(os.getenv("ITEM_NAME_TEST_CHUNKS", str(default_chunks_path)))
+    input_chunks = os.getenv("ITEM_NAME_TEST_CHUNKS", "").strip()
+    if not input_chunks:
+        raise SystemExit("Set ITEM_NAME_TEST_CHUNKS to the chunks file you intend to import")
+    chunks_path = Path(input_chunks)
 
     if not chunks_path.exists():
         print(f"chunks.json 不存在: {chunks_path}")

@@ -1,0 +1,12 @@
+{
+  "pdf_info": [
+    {"page_idx": 0, "page_size": [612, 792]},
+    {"page_idx": 1, "page_size": [612, 792]},
+    {"page_idx": 2, "page_size": [612, 792]},
+    {"page_idx": 3, "page_size": [612, 792]}
+  ],
+  "_backend": "hybrid-auto-engine",
+  "_ocr_enable": true,
+  "_vlm_ocr_enable": true,
+  "_version_name": "fixture-1"
+}

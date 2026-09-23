@@ -9,6 +9,7 @@ import re
 import os
 import json
 import sys
+from pathlib import Path
 from typing import List, Tuple, Optional
 
 # 允许直接运行本文件：python knowledge/processor/import_process/nodes/document_spliter_node.py
@@ -87,8 +88,11 @@ except ImportError:
 
 from knowledge.processor.import_process.base import BaseNode, setup_logging
 from knowledge.processor.import_process.state import ImportGraphState
-from knowledge.processor.import_process.config import get_config
 from knowledge.processor.import_process.exceptions import DocumentSplitError
+from knowledge.document_ir.chunking import ChunkingConfig, chunk_document
+from knowledge.document_ir.indexing import chunks_to_index_rows
+from knowledge.document_ir.models import DocumentIR
+from knowledge.document_ir.serialization import save_document_ir
 
 
 class DocumentSplitNode(BaseNode):
@@ -112,7 +116,10 @@ class DocumentSplitNode(BaseNode):
     # ------------------------------------------------------------------ #
 
     def process(self, state: ImportGraphState) -> ImportGraphState:
-        config = get_config()
+        config = self.config
+
+        if state.get("document_ir") is not None:
+            return self._process_document_ir(state, config)
 
         # Step 1: 获取输入
         content, file_title, max_length = self._get_inputs(state, config)
@@ -150,6 +157,42 @@ class DocumentSplitNode(BaseNode):
         state["chunks"] = sections
         self._backup_chunks(state, sections)
 
+        return state
+
+    def _process_document_ir(self, state: ImportGraphState, config) -> ImportGraphState:
+        """Chunk unified IR and project it to the legacy index-row boundary."""
+
+        raw_document = state.get("document_ir")
+        document = (
+            raw_document
+            if isinstance(raw_document, DocumentIR)
+            else DocumentIR.model_validate(raw_document)
+        )
+        if not document.blocks:
+            raise DocumentSplitError("document_ir.blocks 为空", node_name=self.name)
+
+        chunked = chunk_document(
+            document,
+            ChunkingConfig(
+                max_characters=config.max_content_length,
+                min_characters=config.min_content_length,
+                overlap_characters=max(0, config.overlap_sentences) * 120,
+                merge_peers=True,
+                repeat_table_header=True,
+            ),
+        )
+        state["document_ir"] = chunked
+        state["chunks"] = chunks_to_index_rows(
+            chunked,
+            item_name=state.get("item_name", ""),
+        )
+        output_path = Path(
+            state.get("ir_path") or Path(state.get("file_dir") or ".") / "document.ir.json"
+        )
+        save_document_ir(chunked, output_path)
+        state["ir_path"] = str(output_path)
+        self._log_summary(chunked.raw_text, state["chunks"], config.max_content_length)
+        self._backup_chunks(state, state["chunks"])
         return state
 
     # ------------------------------------------------------------------ #
@@ -474,15 +517,9 @@ if __name__ == "__main__":
     setup_logging()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
-    current_file = os.path.abspath(__file__)
-    import_process_dir = os.path.dirname(os.path.dirname(current_file))
-    sample_document_path = os.path.join(
-        import_process_dir,
-        "import_temp_Dir",
-        "hak180使用说明书",
-        "hybrid_auto",
-        "hak180使用说明书.md",
-    )
+    sample_document_path = os.getenv("DOCUMENT_SPLIT_TEST_FILE", "").strip()
+    if not sample_document_path:
+        raise SystemExit("Set DOCUMENT_SPLIT_TEST_FILE to the Markdown document you intend to split")
 
     with open(sample_document_path, "r", encoding="utf-8") as f:
         content = f.read().strip()

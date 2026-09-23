@@ -60,6 +60,12 @@ class RrfNode(BaseNode):
             else:
                 chunk = dict(raw_chunk)
 
+            # Stage-1 collections carry a stable application ID even when an
+            # existing stage-0 Milvus collection still exposes an auto ID.
+            if chunk.get("stable_id"):
+                chunk["storage_chunk_id"] = chunk.get("chunk_id")
+                chunk["chunk_id"] = chunk["stable_id"]
+
             if RrfNode._get_chunk_id(chunk):
                 normalized_chunks.append(chunk)
 
@@ -123,7 +129,7 @@ class RrfNode(BaseNode):
 
     @staticmethod
     def _get_chunk_id(doc: Dict[str, Any]) -> str:
-        chunk_id = doc.get("chunk_id") or doc.get("id")
+        chunk_id = doc.get("stable_id") or doc.get("chunk_id") or doc.get("id")
         return str(chunk_id).strip() if chunk_id is not None else ""
 
     @staticmethod

@@ -7,7 +7,6 @@ Generate dense and sparse vectors for document chunks.
 from typing import List
 
 from knowledge.processor.import_process.base import BaseNode, setup_logging
-from knowledge.processor.import_process.config import get_config
 from knowledge.processor.import_process.exceptions import EmbeddingError
 from knowledge.processor.import_process.state import ImportGraphState
 from knowledge.utils.embedding_utils import get_bge_m3_model
@@ -25,7 +24,7 @@ class BgeEmbeddingNode(BaseNode):
 
     def process(self, state: ImportGraphState) -> ImportGraphState:
         """Execute chunk embedding."""
-        config = get_config()
+        config = self.config
 
         # Step 1: get and validate chunks.
         chunks = state.get("chunks", [])
@@ -52,6 +51,18 @@ class BgeEmbeddingNode(BaseNode):
             batch = chunks[i:i + batch_size]
             batch_output = self._process_batch(bge_m3_ef, batch, i, len(chunks))
             output_data.extend(batch_output)
+
+        incomplete_ir_rows = [
+            row.get("chunk_id")
+            for row in output_data
+            if row.get("document_id")
+            and (row.get("dense_vector") is None or row.get("sparse_vector") is None)
+        ]
+        if incomplete_ir_rows:
+            raise EmbeddingError(
+                f"embedding incomplete for {len(incomplete_ir_rows)} IR chunks",
+                node_name=self.name,
+            )
 
         # Step 9: update state and return.
         self.log_step("step_2", f"embedding finished, {len(output_data)} chunks")
@@ -99,16 +110,11 @@ class BgeEmbeddingNode(BaseNode):
                 sparse_vector = normalize_sparse_vector(sparse_dict)
 
                 # Step 8: assemble output item.
-                item = {
-                    "content": doc.get("content"),
-                    "title": doc.get("title"),
-                    "parent_title": doc.get("parent_title", ""),
-                    "part": doc.get("part", 0),
-                    "file_title": doc.get("file_title"),
-                    "item_name": doc.get("item_name"),
-                    "dense_vector": dense_vector,
-                    "sparse_vector": sparse_vector,
-                }
+                # Preserve parser-neutral identity and provenance metadata. The
+                # embedding stage owns vectors only; it must not reshape chunks.
+                item = dict(doc)
+                item["dense_vector"] = dense_vector
+                item["sparse_vector"] = sparse_vector
                 output.append(item)
 
             self.logger.info(
@@ -137,8 +143,8 @@ if __name__ == "__main__":
             {
                 "title": "Safety",
                 "content": "Read the safety instructions before use.",
-                "file_title": "HAK180 manual",
-                "item_name": "HAK180",
+                "file_title": "Example manual",
+                "item_name": "Example Device",
             }
         ]
     }
