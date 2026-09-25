@@ -36,6 +36,10 @@ class ImportGraphState(TypedDict, total=False):
     # ==================== 文件信息 ====================
     file_title: str  # 文件标题（不含扩展名）
     item_name: str  # 识别出的商品/产品名称
+    tenant_id: str
+    visibility: str
+    acl_readers: List[str]
+    graph_version: str
 
     # ==================== 处理中间数据 ====================
     md_content: str  # Markdown 文档内容
@@ -82,6 +86,10 @@ GRAPH_DEFAULT_STATE: ImportGraphState = {
     "ir_path": "",
     "node_timings": {},
     "item_name": "",
+    "tenant_id": "public",
+    "visibility": "public",
+    "acl_readers": [],
+    "graph_version": "",
 }
 
 

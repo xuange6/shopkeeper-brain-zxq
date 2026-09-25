@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from typing import Any, Dict, List
 from urllib.parse import urlsplit
@@ -63,6 +64,23 @@ def build_source_references(raw_docs: Any) -> List[Dict[str, Any]]:
                 "image_urls": source_image_urls(raw_doc),
                 "url": str(raw_doc.get("url") or ""),
                 "score": score,
+                "rerank_raw_score": _json_number(raw_doc.get("rerank_raw_score")),
+                "calibrated_relevance": _json_number(raw_doc.get("calibrated_relevance")),
+                "ranking_score": _json_number(raw_doc.get("ranking_score")),
+                "answer_confidence": _json_number(raw_doc.get("answer_confidence")),
+                "authority": _json_number(raw_doc.get("authority")),
+                "freshness": _json_number(raw_doc.get("freshness")),
+                "source_type": str(raw_doc.get("source_type") or ""),
+                "domain": str(raw_doc.get("domain") or ""),
+                "retrieved_at": str(raw_doc.get("retrieved_at") or ""),
+                "retrieved_date": str(raw_doc.get("retrieved_date") or ""),
+                "publication_date": str(raw_doc.get("publication_date") or ""),
+                "supported_claims": [
+                    str(claim)[:500]
+                    for claim in _json_list(raw_doc.get("supported_claims"))
+                    if str(claim).strip()
+                ],
+                "evidence_group_id": str(raw_doc.get("evidence_group_id") or ""),
                 "preview": content[:280] + ("…" if len(content) > 280 else ""),
             }
         )
@@ -111,6 +129,19 @@ def build_retrieval_trace(state: Dict[str, Any]) -> Dict[str, Any]:
                     "parent_title": str(doc.get("parent_title") or ""),
                     "url": str(doc.get("url") or ""),
                     "score": score,
+                    "rerank_raw_score": _json_number(doc.get("rerank_raw_score")),
+                    "calibrated_relevance": _json_number(doc.get("calibrated_relevance")),
+                    "ranking_score": _json_number(doc.get("ranking_score")),
+                    "authority": _json_number(doc.get("authority")),
+                    "freshness": _json_number(doc.get("freshness")),
+                    "structure_match": _json_number(doc.get("structure_match")),
+                    "evidence_coverage": _json_number(doc.get("evidence_coverage")),
+                    "source_type": str(doc.get("source_type") or ""),
+                    "domain": str(doc.get("domain") or ""),
+                    "retrieved_at": str(doc.get("retrieved_at") or ""),
+                    "retrieved_date": str(doc.get("retrieved_date") or ""),
+                    "publication_date": str(doc.get("publication_date") or ""),
+                    "evidence_group_id": str(doc.get("evidence_group_id") or ""),
                     "rrf_sources": list(doc.get("rrf_sources") or []),
                 }
             )
@@ -119,6 +150,9 @@ def build_retrieval_trace(state: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "stages": stages,
         "status": dict(state.get("retrieval_status") or {}),
+        "plan": dict(state.get("retrieval_plan") or {}),
+        "ranking_events": list(state.get("retrieval_trace_events") or []),
+        "evidence_decision": dict(state.get("evidence_decision") or {}),
     }
 
 
@@ -153,8 +187,56 @@ def build_query_diagnostics(
         "node_timings": timings,
         "total_time": round(elapsed, 3) if elapsed is not None else None,
         "model_usage": dict(state.get("model_usage") or {}),
+        "policy_decision": {
+            key: value
+            for key, value in (state.get("policy_decision") or {}).items()
+            if key != "sanitized_query"
+        },
+        "context_security": dict(state.get("context_security") or {}),
+        "output_security": dict(state.get("output_security") or {}),
+        "access_control": dict(state.get("access_control") or {}),
+        "web_search": dict(state.get("web_search_diagnostics") or {}),
+        "retrieval_plan": dict(state.get("retrieval_plan") or {}),
+        "evidence_decision": dict(state.get("evidence_decision") or {}),
+        "constraint_completion": {
+            key: value
+            for key, value in (state.get("constraint_completion") or {}).items()
+            if key != "appended_claims"
+        },
+        "citation_verification": {
+            key: value
+            for key, value in (state.get("citation_verification") or {}).items()
+            if key != "claims"
+        },
+    }
+    model_usage = diagnostics["model_usage"]
+    by_operation = model_usage.get("by_operation") if isinstance(model_usage, dict) else {}
+    diagnostics["resource_breakdown"] = {
+        "query_rewrite": dict((by_operation or {}).get("query_rewrite") or {}),
+        "direct_retrieval": {"latency_ms": round(timings.get("search_embedding", 0.0) * 1000, 3)},
+        "hyde": {
+            **dict((by_operation or {}).get("hyde") or {}),
+            "stage_latency_ms": round(timings.get("search_embedding_hyde", 0.0) * 1000, 3),
+        },
+        "knowledge_graph": {
+            **dict((by_operation or {}).get("kg_entity") or {}),
+            "stage_latency_ms": round(timings.get("query_kg", 0.0) * 1000, 3),
+        },
+        "web": {"latency_ms": round(timings.get("web_search_mcp", 0.0) * 1000, 3)},
+        "rerank": {"latency_ms": round(timings.get("rerank_node", 0.0) * 1000, 3)},
+        "answer": dict((by_operation or {}).get("answer") or {}),
     }
     if include_retrieval_trace:
+        # Evaluation/debug traces retain the per-claim binding decisions;
+        # ordinary API/history diagnostics stay compact and do not expose the
+        # generated draft.  This makes post-generation citation pruning
+        # observable without changing the public response contract.
+        diagnostics["citation_verification"]["claims"] = list(
+            (state.get("citation_verification") or {}).get("claims") or []
+        )
+        diagnostics["constraint_completion"]["appended_claims"] = list(
+            (state.get("constraint_completion") or {}).get("appended_claims") or []
+        )
         diagnostics["retrieval_trace"] = build_retrieval_trace(state)
     return diagnostics
 
@@ -215,3 +297,13 @@ def _json_list(value: Any) -> List[Any]:
         return parsed if isinstance(parsed, list) else []
     except (TypeError, ValueError, json.JSONDecodeError):
         return []
+
+
+def _json_number(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        number = float(value)
+        return round(number, 6) if math.isfinite(number) else None
+    except (TypeError, ValueError):
+        return None

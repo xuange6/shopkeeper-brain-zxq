@@ -1,0 +1,24 @@
+{
+  "schema_version": "rag-release-v1",
+  "release_id": "stage2-industrial-rag-v2.0.0",
+  "policy": "acl-compatible-index-switch",
+  "candidate": {
+    "CHUNKS_COLLECTION": "kb_chunks_ir_stage2_release_20260925",
+    "INDEX_VERSION": "stage2-acl-release-candidate-20260925",
+    "ENTITY_NAME_COLLECTION": "kb_graph_entities_stage2_release_20260925",
+    "KG_GRAPH_VERSION": "stage2-acl-kg-release-20260925"
+  },
+  "rollback": {
+    "CHUNKS_COLLECTION": "kb_chunks_ir_stage2_release_control_20260925",
+    "INDEX_VERSION": "stage2-acl-release-control-20260925",
+    "ENTITY_NAME_COLLECTION": "kb_graph_entities_stage2_release_20260925",
+    "KG_GRAPH_VERSION": "stage2-acl-kg-release-20260925"
+  },
+  "verification": {
+    "tenant_id": "public",
+    "item_name": "HAK 180",
+    "expected_chunks": 129,
+    "candidate_report": "output/stage2-acl-release-candidate.index-verification.20260925.json",
+    "rollback_report": "output/stage2-acl-release-control.index-verification.20260925.json"
+  }
+}

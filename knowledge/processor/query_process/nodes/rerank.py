@@ -9,6 +9,12 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from knowledge.processor.query_process.base import BaseNode
+from knowledge.processor.query_process.evidence import (
+    annotate_evidence,
+    build_evidence_decision,
+    canonical_evidence_id,
+)
+from knowledge.processor.query_process.security import inspect_untrusted_context
 from knowledge.processor.query_process.state import QueryGraphState
 from knowledge.utils.bge_rerank_util import get_reranker_model
 
@@ -22,16 +28,76 @@ class RerankNode(BaseNode):
 
         # 2. 合并多源文档
         merged_multi_docs = self._deduplicate_docs(self._merge_multi_source_docs(state))
+        safe_docs: List[Dict[str, Any]] = []
+        security_blocked: List[Dict[str, Any]] = []
+        for doc in merged_multi_docs:
+            audit = inspect_untrusted_context(doc.get("content", ""), self.config)
+            if self.config.security_context_guard_enabled and audit["blocked"]:
+                security_blocked.append({
+                    "chunk_id": str(doc.get("chunk_id") or ""),
+                    "url": str(doc.get("url") or ""),
+                    "source": str(doc.get("source") or ""),
+                    "matched_rules": list(audit.get("matched_rules") or []),
+                })
+                continue
+            safe_docs.append(doc)
+        state["context_security"] = {
+            "version": "untrusted-context-guard-v1",
+            "enabled": bool(self.config.security_context_guard_enabled),
+            "retrieval_candidates": {
+                "inspected_count": len(merged_multi_docs),
+                "blocked_count": len(security_blocked),
+                "blocked": security_blocked,
+            },
+            "blocked_count": len(security_blocked),
+        }
 
         # 3. Rerank 精排（精排打分）
         reranked_docs, rerank_status = self._rerank_with_status(
-            user_query, merged_multi_docs
+            user_query, safe_docs
         )
 
-        # 4. 动态 Top_K 截取（断崖检测）
-        cutoff_docs = self._cliff_cutoff(reranked_docs)
+        # 4. Keep the model's raw score for diagnostics, but calibrate it before
+        # source-aware ranking or refusal. A negative raw logit is not a
+        # probability and must never be compared directly with a refusal limit.
+        plan = state.get("retrieval_plan") or {}
+        features = plan.get("query_features") if isinstance(plan, dict) else {}
+        calibrated_docs = [
+            annotate_evidence(doc, user_query, features or {}, self.config)
+            for doc in reranked_docs
+        ]
+        calibrated_docs.sort(
+            key=lambda item: (
+                -float(item.get("ranking_score") or 0.0),
+                -float(item.get("calibrated_relevance") or 0.0),
+                str(item.get("evidence_group_id") or ""),
+            )
+        )
+
+        # 5. Canonical evidence grouping removes duplicate fragments created by
+        # different chunking policies without recreating old duplicate chunks.
+        grouped_docs, dropped = self._deduplicate_evidence_groups(calibrated_docs)
+
+        # 6. Dynamic cutoff operates on calibrated ranking scores.
+        cutoff_docs = self._cliff_cutoff(grouped_docs)[: self.config.answer_max_evidence]
+        state["evidence_decision"] = build_evidence_decision(
+            cutoff_docs,
+            state.get("kg_triples") or [],
+            user_query,
+            self.config,
+        )
+        state["retrieval_trace_events"] = self._build_trace_events(
+            safe_docs, reranked_docs, cutoff_docs, dropped, security_blocked
+        )
 
         state["reranked_docs"] = cutoff_docs
+        rerank_status = {
+            **rerank_status,
+            "raw_score_distribution": self._score_distribution(reranked_docs),
+            "selected_count": len(cutoff_docs),
+            "canonical_duplicates_removed": len(dropped),
+            "security_candidates_removed": len(security_blocked),
+        }
         state["retrieval_status"] = {
             **(state.get("retrieval_status") or {}),
             self.name: rerank_status,
@@ -85,8 +151,8 @@ class RerankNode(BaseNode):
 
         cutoff_pos = upper_bound
         for index in range(lower_bound - 1, upper_bound - 1):
-            current_score = ranked_docs[index].get("score")
-            next_score = ranked_docs[index + 1].get("score")
+            current_score = ranked_docs[index].get("ranking_score")
+            next_score = ranked_docs[index + 1].get("ranking_score")
 
             if current_score is None or next_score is None:
                 continue
@@ -167,6 +233,7 @@ class RerankNode(BaseNode):
                 title=title,
                 url=url,
                 source="web",
+                metadata=web_doc,
             )
             final_docs.append(format_web_doc)
 
@@ -208,6 +275,95 @@ class RerankNode(BaseNode):
             seen.add(identity)
             unique_docs.append(doc)
         return unique_docs
+
+    @staticmethod
+    def _deduplicate_evidence_groups(
+        docs: List[Dict[str, Any]],
+    ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        selected: List[Dict[str, Any]] = []
+        dropped: List[Dict[str, Any]] = []
+        seen: set[str] = set()
+        for doc in docs:
+            group_id = str(doc.get("evidence_group_id") or canonical_evidence_id(doc))
+            doc["evidence_group_id"] = group_id
+            if group_id in seen:
+                dropped.append(doc)
+                continue
+            seen.add(group_id)
+            selected.append(doc)
+        return selected, dropped
+
+    @staticmethod
+    def _score_distribution(docs: List[Dict[str, Any]]) -> Dict[str, Any]:
+        scores = [
+            float(doc["score"])
+            for doc in docs
+            if doc.get("score") is not None
+        ]
+        if not scores:
+            return {"count": 0, "min": None, "max": None, "mean": None}
+        return {
+            "count": len(scores),
+            "min": round(min(scores), 6),
+            "max": round(max(scores), 6),
+            "mean": round(sum(scores) / len(scores), 6),
+        }
+
+    @staticmethod
+    def _build_trace_events(
+        merged: List[Dict[str, Any]],
+        raw_ranked: List[Dict[str, Any]],
+        selected: List[Dict[str, Any]],
+        duplicates: List[Dict[str, Any]],
+        security_blocked: List[Dict[str, Any]] | None = None,
+    ) -> List[Dict[str, Any]]:
+        input_rank = {
+            canonical_evidence_id(doc) + ":" + str(doc.get("chunk_id") or doc.get("url") or ""): rank
+            for rank, doc in enumerate(merged, 1)
+        }
+        raw_rank = {
+            canonical_evidence_id(doc) + ":" + str(doc.get("chunk_id") or doc.get("url") or ""): rank
+            for rank, doc in enumerate(raw_ranked, 1)
+        }
+        selected_keys = {
+            canonical_evidence_id(doc) + ":" + str(doc.get("chunk_id") or doc.get("url") or ""): rank
+            for rank, doc in enumerate(selected, 1)
+        }
+        duplicate_keys = {
+            canonical_evidence_id(doc) + ":" + str(doc.get("chunk_id") or doc.get("url") or "")
+            for doc in duplicates
+        }
+        events = []
+        for doc in raw_ranked:
+            key = canonical_evidence_id(doc) + ":" + str(doc.get("chunk_id") or doc.get("url") or "")
+            events.append(
+                {
+                    "chunk_id": str(doc.get("chunk_id") or ""),
+                    "url": str(doc.get("url") or ""),
+                    "evidence_group_id": canonical_evidence_id(doc),
+                    "input_rank": input_rank.get(key),
+                    "raw_rerank_rank": raw_rank.get(key),
+                    "final_rank": selected_keys.get(key),
+                    "decision": (
+                        "selected" if key in selected_keys
+                        else "canonical_duplicate" if key in duplicate_keys
+                        else "cutoff"
+                    ),
+                }
+            )
+        for blocked in security_blocked or []:
+            events.append({
+                "chunk_id": str(blocked.get("chunk_id") or ""),
+                "url": str(blocked.get("url") or ""),
+                "evidence_group_id": "",
+                "input_rank": None,
+                "raw_rerank_rank": None,
+                "final_rank": None,
+                "decision": "security_filter",
+                "filter_reason": "untrusted_instruction_in_evidence",
+                "matched_rules": list(blocked.get("matched_rules") or []),
+            })
+        return events
 
     def _rerank_merged_docs(
         self,

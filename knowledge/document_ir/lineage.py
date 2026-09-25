@@ -34,6 +34,17 @@ def _block_signature(block: DocumentBlock) -> tuple[str, tuple[str, ...], str]:
     return block.type.value, tuple(block.title_path), normalized_text(block.text)
 
 
+def _stable_block_payload(block: DocumentBlock) -> tuple:
+    """Verify an exact ID without mistaking a structural correction for content."""
+    return (
+        block.type.value,
+        block.content_layer,
+        normalized_text(block.text),
+        block.image.sha256 if block.image else None,
+        block.table.html if block.table else None,
+    )
+
+
 def seed_lineage(document: DocumentIR) -> DocumentIR:
     """Assign deterministic identities without claiming ambiguous duplicate content."""
 
@@ -135,33 +146,69 @@ def align_document(before: DocumentIR, after: DocumentIR) -> DocumentIR:
             if old_number is not None:
                 provenance.page_uid = old_page_uids[old_number]
 
-    old_candidates = {block.order: block for block in old.blocks if block.content_layer == "body"}
-    new_candidates = {block.order: block for block in result.blocks if block.content_layer == "body"}
+    # Include furniture only for the exact stable-ID path. Repeated headers and
+    # ambiguous body text are still safe to inherit when the same unchanged
+    # source block is present, even if a section correction changes its seed.
+    old_candidates = {index: block for index, block in enumerate(old.blocks)}
+    new_candidates = {index: block for index, block in enumerate(result.blocks)}
     used_old: set[int] = set()
     matched: dict[int, int] = {}
+    old_by_id = {block.id: index for index, block in old_candidates.items()}
+    for new_index, new_block in new_candidates.items():
+        old_index = old_by_id.get(new_block.id)
+        if old_index is None:
+            continue
+        old_block = old_candidates[old_index]
+        old_numbers = {p.page_number for p in old_block.provenance if p.page_number}
+        new_numbers = {p.page_number for p in new_block.provenance if p.page_number}
+        # With changed PDF bytes, a repeated block can coincidentally occupy the
+        # same parser position. Require a confident page correspondence too;
+        # ambiguous duplicate pages must not acquire identity from their index.
+        same_source_location = before.source.sha256 == after.source.sha256 or (
+            bool(new_numbers)
+            and all(number in page_matches for number in new_numbers)
+            and {page_matches[number] for number in new_numbers} == old_numbers
+        )
+        if same_source_location and _stable_block_payload(new_block) == _stable_block_payload(old_block):
+            matched[new_index] = old_index
+            used_old.add(old_index)
+    stable_id_matches = len(matched)
 
     # Exact matches are global but must be unique. This survives inserted pages
     # and changed parser item indices without relying on either as identity.
     old_signatures: dict[tuple, list[int]] = defaultdict(list)
     new_signatures: dict[tuple, list[int]] = defaultdict(list)
     for index, block in old_candidates.items():
-        old_signatures[_block_signature(block)].append(index)
+        if block.content_layer == "body":
+            old_signatures[_block_signature(block)].append(index)
     for index, block in new_candidates.items():
-        new_signatures[_block_signature(block)].append(index)
+        if block.content_layer == "body":
+            new_signatures[_block_signature(block)].append(index)
     for signature, new_indexes in new_signatures.items():
         old_indexes = old_signatures.get(signature, [])
-        if len(new_indexes) == len(old_indexes) == 1:
+        if (
+            len(new_indexes) == len(old_indexes) == 1
+            and new_indexes[0] not in matched
+            and old_indexes[0] not in used_old
+        ):
             matched[new_indexes[0]] = old_indexes[0]
             used_old.add(old_indexes[0])
 
     # Changed text can inherit lineage only when the page/section/type and
     # similarity produce an unambiguous mutual-best match.
-    remaining_old = {index: block for index, block in old_candidates.items() if index not in used_old}
-    remaining_new = {index: block for index, block in new_candidates.items() if index not in matched}
+    remaining_old = {index: block for index, block in old_candidates.items() if index not in used_old and block.content_layer == "body"}
+    remaining_new = {index: block for index, block in new_candidates.items() if index not in matched and block.content_layer == "body"}
     scores: dict[tuple[int, int], float] = {}
     for new_index, new_block in remaining_new.items():
         for old_index, old_block in remaining_old.items():
             if new_block.type != old_block.type or new_block.title_path != old_block.title_path:
+                continue
+            signature = _block_signature(new_block)
+            if signature == _block_signature(old_block) and (
+                len(new_signatures[signature]) > 1 or len(old_signatures[signature]) > 1
+            ):
+                # Removing exact-ID matches does not make globally repeated
+                # content unique. A remaining delete/add pair is ambiguous.
                 continue
             new_uids = {p.page_uid for p in new_block.provenance if p.page_uid}
             old_uids = {p.page_uid for p in old_block.provenance if p.page_uid}
@@ -189,11 +236,29 @@ def align_document(before: DocumentIR, after: DocumentIR) -> DocumentIR:
 
     for new_index, old_index in matched.items():
         new_candidates[new_index].lineage_id = old_candidates[old_index].lineage_id
+    # A newly added block can have the old title/text signature of a structurally
+    # corrected exact-ID match. Reserve inherited IDs before accepting its seed,
+    # otherwise both blocks would claim the same lineage.
+    reserved = {new_candidates[index].lineage_id for index in matched}
+    for index, block in new_candidates.items():
+        if index in matched:
+            continue
+        if block.lineage_id in reserved:
+            nonce = 0
+            while True:
+                candidate = stable_id("lin", result.document_id, "unmatched", result.revision_id, block.id, nonce)
+                if candidate not in reserved:
+                    block.lineage_id = candidate
+                    break
+                nonce += 1
+        reserved.add(block.lineage_id)
     result.metadata["alignment"] = {
         "previous_revision_id": old.revision_id,
         "matched_pages": {str(new): old_number for new, old_number in sorted(page_matches.items())},
         "matched_blocks": len(matched),
         "unmatched_blocks": len(new_candidates) - len(matched),
-        "method": "unique-content-and-mutual-best-v1",
+        "matched_by_stable_block_id": stable_id_matches,
+        "matched_furniture_blocks": sum(new_candidates[index].content_layer != "body" for index in matched),
+        "method": "stable-id-and-unique-content-and-mutual-best-v2",
     }
     return DocumentIR.model_validate(result.model_dump())

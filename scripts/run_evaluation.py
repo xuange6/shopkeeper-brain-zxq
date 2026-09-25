@@ -30,7 +30,7 @@ from knowledge.evaluation.runner import (
 DEFAULT_DATASET = ROOT / "evaluation/datasets/shopkeeper_qa.v0.1.0.jsonl"
 DEFAULT_SNAPSHOT = ROOT / "evaluation/snapshots/stage0-current.core.jsonl"
 DEFAULT_BASELINE = ROOT / "evaluation/baselines/stage0-current.core.json"
-DEFAULT_CONTRACT_BASELINE = ROOT / "evaluation/baselines/stage1-contract-v2.core.json"
+DEFAULT_CONTRACT_BASELINE = ROOT / "evaluation/baselines/stage2-release-contract.core.json"
 DEFAULT_GATE = ROOT / "evaluation/gate.json"
 DEFAULT_CONTRACT_GATE = ROOT / "evaluation/contract_gate.v2.json"
 

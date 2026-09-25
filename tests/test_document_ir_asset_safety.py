@@ -5,7 +5,7 @@ from contextlib import nullcontext
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from knowledge.document_ir.adapters import MarkdownAdapter, MinerUAdapter
 from knowledge.document_ir.adapters.common import UnsafeImagePath
@@ -13,11 +13,28 @@ from knowledge.document_ir.chunking import chunk_document
 from knowledge.document_ir.normalize import normalize_document
 from knowledge.processor.import_process.config import ImportConfig
 from knowledge.processor.import_process.exceptions import ValidationError
-from knowledge.processor.import_process.nodes.document_enrich_node import DocumentEnrichNode
+from knowledge.processor.import_process.nodes.document_enrich_node import (
+    DocumentEnrichNode,
+    _asset_content_type,
+)
 
 
 _ENRICH_CLIENT = "knowledge.processor.import_process.nodes.document_enrich_node.get_minio_client"
 _IMAGE_BYTES = b"\x89PNG\r\n\x1a\nsynthetic-test-image"
+
+
+class StrictImageClient:
+    """Reject missing content_type and accidental unsupported upload keywords."""
+
+    def __init__(self, failures: int = 0):
+        self.uploads = []
+        self.failures = failures
+
+    def fput_object(self, bucket, object_name, file_path, *, content_type):
+        self.uploads.append((bucket, object_name, file_path, content_type))
+        if self.failures:
+            self.failures -= 1
+            raise OSError("synthetic temporary upload failure")
 
 
 class DocumentIRAssetSafetyTests(unittest.TestCase):
@@ -234,15 +251,54 @@ class DocumentIRAssetSafetyTests(unittest.TestCase):
             image.write_bytes(_IMAGE_BYTES)
             source = self._markdown(root, "diagram.png")
             document = chunk_document(normalize_document(MarkdownAdapter().convert(source)))
-            client = Mock()
+            next(block.image for block in document.blocks if block.image).mime_type = "text/html"
+            client = StrictImageClient()
             node = DocumentEnrichNode(config=ImportConfig(
                 minio_bucket="test-assets", minio_endpoint="storage.example.invalid"
             ))
             with patch(_ENRICH_CLIENT, return_value=client):
                 result = node.process({"document_ir": document, "file_dir": str(root)})
-            client.fput_object.assert_called_once()
-            self.assertEqual(client.fput_object.call_args.args[2], str(image.resolve()))
+            self.assertEqual(len(client.uploads), 1)
+            self.assertEqual(client.uploads[0][0], "test-assets")
+            self.assertEqual(client.uploads[0][2:], (str(image.resolve()), "image/png"))
+            enriched_image = next(block.image for block in result["document_ir"].blocks if block.image)
+            self.assertEqual(enriched_image.mime_type, "image/png")
             self.assertEqual(result["document_ir"].metadata["enrichment"]["uploaded_image_count"], 1)
+
+    def test_asset_content_types_are_deterministic_and_never_active_content(self):
+        expected = {
+            ".png": "image/png", ".PNG": "image/png",
+            ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+            ".gif": "image/gif", ".bmp": "image/bmp", ".webp": "image/webp",
+            ".tif": "image/tiff", ".tiff": "image/tiff",
+            ".unknown": "application/octet-stream", ".html": "application/octet-stream",
+            ".svg": "application/octet-stream", "": "application/octet-stream",
+        }
+        for suffix, content_type in expected.items():
+            with self.subTest(suffix=suffix):
+                self.assertEqual(_asset_content_type(Path("diagram" + suffix)), content_type)
+
+    def test_upload_failure_then_retry_keeps_identity_and_sets_content_type(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "diagram.PNG").write_bytes(_IMAGE_BYTES)
+            source = self._markdown(root, "diagram.PNG")
+            document = chunk_document(normalize_document(MarkdownAdapter().convert(source)))
+            client = StrictImageClient(failures=1)
+            node = DocumentEnrichNode(config=ImportConfig(
+                minio_bucket="test-assets", minio_endpoint="storage.example.invalid"
+            ))
+            with patch(_ENRICH_CLIENT, return_value=client):
+                failed = node.process({"document_ir": document, "file_dir": str(root)})
+                self.assertEqual(failed["document_ir"].metadata["enrichment"]["uploaded_image_count"], 0)
+                self.assertFalse(any("storage.example.invalid" in c.contextual_text for c in failed["document_ir"].chunks))
+                retried = node.process(failed)["document_ir"]
+            self.assertEqual(retried.metadata["enrichment"]["uploaded_image_count"], 1)
+            self.assertEqual([c.id for c in document.chunks], [c.id for c in retried.chunks])
+            self.assertEqual(len(client.uploads), 2)
+            self.assertEqual(client.uploads[0], client.uploads[1])
+            self.assertEqual(client.uploads[1][3], "image/png")
+            self.assertTrue(any("storage.example.invalid" in c.contextual_text for c in retried.chunks))
 
     def test_enrichment_retry_keeps_stable_context_and_replaces_stale_links(self):
         with TemporaryDirectory() as temporary:
@@ -253,7 +309,8 @@ class DocumentIRAssetSafetyTests(unittest.TestCase):
             node = DocumentEnrichNode(config=ImportConfig(
                 minio_bucket="test-assets", minio_endpoint="storage.example.invalid"
             ))
-            with patch(_ENRICH_CLIENT, return_value=Mock()):
+            client = StrictImageClient()
+            with patch(_ENRICH_CLIENT, return_value=client):
                 result = node.process({"document_ir": document, "file_dir": str(root)})
                 first = result["document_ir"].model_dump()
                 second = node.process(result)["document_ir"].model_dump()
@@ -263,6 +320,9 @@ class DocumentIRAssetSafetyTests(unittest.TestCase):
             self.assertEqual([c.id for c in document.chunks], [c.id for c in updated.chunks])
             self.assertTrue(any("replacement.example.invalid" in c.contextual_text for c in updated.chunks))
             self.assertTrue(all("storage.example.invalid" not in c.contextual_text for c in updated.chunks))
+            self.assertEqual(len(client.uploads), 3)
+            self.assertTrue(all(upload == client.uploads[0] for upload in client.uploads))
+            self.assertEqual(client.uploads[0][3], "image/png")
 
 
 if __name__ == "__main__":

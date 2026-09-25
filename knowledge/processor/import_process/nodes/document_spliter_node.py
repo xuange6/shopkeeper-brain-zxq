@@ -185,6 +185,9 @@ class DocumentSplitNode(BaseNode):
         state["chunks"] = chunks_to_index_rows(
             chunked,
             item_name=state.get("item_name", ""),
+            tenant_id=state.get("tenant_id", "public"),
+            visibility=state.get("visibility", "public"),
+            acl_readers=state.get("acl_readers") or [],
         )
         output_path = Path(
             state.get("ir_path") or Path(state.get("file_dir") or ".") / "document.ir.json"

@@ -20,6 +20,13 @@ def _env_int(name: str, default: int) -> int:
     except (TypeError, ValueError):
         return default
 
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
 # 为了消灭这些重复的 __init__ 和 self，
 # Python 官方推出了 @dataclass 这个偷懒神器。它的目的就是让你直接把变量写在外面（类层级）：
 # 使其属于每个对象，而不是大的类
@@ -73,6 +80,15 @@ class ImportConfig:
     )
     entity_name_collection: str = field(
         default_factory=lambda: os.getenv("ENTITY_NAME_COLLECTION", "")
+    )
+    kg_graph_version: str = field(
+        default_factory=lambda: os.getenv("KG_GRAPH_VERSION", "legacy")
+    )
+    kg_fail_on_partial: bool = field(
+        default_factory=lambda: _env_bool("KG_FAIL_ON_PARTIAL", True)
+    )
+    kg_require_nonempty: bool = field(
+        default_factory=lambda: _env_bool("KG_REQUIRE_NONEMPTY", True)
     )
 
     # ==================== Neo4j 配置 ====================

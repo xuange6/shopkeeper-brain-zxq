@@ -1,0 +1,27 @@
+{
+  "schema_version": "stage2-index-seed-v2",
+  "collection": "kb_chunks_ir_stage2_acl_v2_20260925",
+  "document_id": "doc_f84fe61b98d713e67f373ccb",
+  "revision_id": "rev_5b3de35a1df1c632e864c39f921d37ae",
+  "source_sha256": "5f75797d1ce6e14746de41c8acd562eec3210a2a0f7ae079177561f2a8e48538",
+  "chunk_count": 129,
+  "unique_chunk_count": 129,
+  "asset_uri_count": 83,
+  "access_policy": {
+    "tenant_id": "public",
+    "visibility": "public",
+    "acl_reader_count": 0
+  },
+  "knowledge_graph": {
+    "status": "passed",
+    "entity_collection": "kb_graph_entities_stage2_acl_v2_20260925",
+    "graph_version": "stage2-acl-kg-v2-20260925",
+    "total_chunks": 129,
+    "processed_chunks": 129,
+    "failed_chunks": 0,
+    "empty_chunks": 7,
+    "total_entities": 923,
+    "total_relations": 741,
+    "errors": []
+  }
+}

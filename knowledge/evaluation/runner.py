@@ -16,6 +16,7 @@ from knowledge.evaluation.metrics import (
     EVALUATOR_VERSION, _source_matches, aggregate_results, evaluate_case,
 )
 from knowledge.evaluation.providers import EvaluationProvider, write_jsonl
+from knowledge.evaluation.usage import USAGE_ACCOUNTING_VERSION, combine_model_usage
 
 
 REQUIRED_CATEGORIES = {
@@ -136,7 +137,7 @@ def collect_metadata(
     dirty = _git(["status", "--porcelain"], root)
     evaluator_files = {
         name: _source_sha256(root / "knowledge/evaluation" / name)
-        for name in ("metrics.py", "runner.py", "providers.py")
+        for name in ("metrics.py", "runner.py", "providers.py", "usage.py")
     }
     query_files = {
         str(path.relative_to(root)).replace("\\", "/"): _source_sha256(path)
@@ -144,19 +145,42 @@ def collect_metadata(
     }
     for name in ("query_result_utils.py", "embedding_utils.py", "bge_rerank_util.py", "llm_utils.py"):
         query_files[f"knowledge/utils/{name}"] = _source_sha256(root / "knowledge/utils" / name)
+    query_files["knowledge/service/query_service.py"] = _source_sha256(
+        root / "knowledge/service/query_service.py"
+    )
+    query_files["knowledge/security/access_control.py"] = _source_sha256(
+        root / "knowledge/security/access_control.py"
+    )
+    query_files["knowledge/schema/query_schema.py"] = _source_sha256(
+        root / "knowledge/schema/query_schema.py"
+    )
     excluded_config = {
         "openai_api_base", "openai_api_key", "default_model", "item_model",
         "milvus_url", "chunks_collection", "item_name_collection", "entity_name_collection",
         "neo4j_uri", "neo4j_username", "neo4j_password", "neo4j_database", "mcp_dashscope_base_url",
     }
-    pricing = {} if is_contract else {name: os.getenv(name, "") for name in ("LLM_INPUT_USD_PER_1M", "LLM_OUTPUT_USD_PER_1M")}
-    try:
-        pricing_known = all(value != "" and math.isfinite(float(value)) and float(value) > 0 for value in pricing.values())
-    except (TypeError, ValueError):
+    if is_contract:
+        pricing = {}
         pricing_known = False
+    else:
+        try:
+            from knowledge.observability.pricing import load_pricing, pricing_metadata
+
+            pricing_config = load_pricing()
+            pricing = pricing_metadata(pricing_config, model=config.default_model)
+            configured_models = pricing_config.get("models") or {}
+            pricing_known = bool(config.default_model) and all(
+                model in configured_models
+                for model in {config.default_model, config.item_model or config.default_model}
+            )
+        except Exception as exc:
+            pricing = {"status": "unavailable", "reason": type(exc).__name__}
+            pricing_known = False
     return {
-        "evaluation_schema_version": "2.0",
+        "evaluation_schema_version": "3.0",
         "evaluator_version": EVALUATOR_VERSION,
+        "usage_accounting_version": USAGE_ACCOUNTING_VERSION,
+        "usage_scope": "all_turns_all_attempts",
         "evaluator_fingerprint": _fingerprint(evaluator_files),
         "evaluator_modules": evaluator_files,
         "query_pipeline_sha256": _fingerprint(query_files),
@@ -180,14 +204,24 @@ def collect_metadata(
                 "BGE_RERANKER_LARGE", "BGE_RERANKER_DEVICE", "BGE_RERANKER_FP16",
             )},
         }),
-        "pricing_configuration_sha256": _fingerprint(pricing),
-        "cost_status": "not_applicable" if is_contract else ("estimated" if pricing_known else "unavailable"),
+        "pricing_configuration_sha256": (
+            "not-applicable" if is_contract else str(pricing.get("fingerprint") or _fingerprint(pricing))
+        ),
+        "pricing": pricing,
+        "cost_status": "not_applicable" if is_contract else ("available" if pricing_known else "unavailable"),
         "index_version": "offline-contract" if is_contract else os.getenv("INDEX_VERSION", "unversioned"),
         "collections": {
             "chunks": config.chunks_collection or "not-configured",
             "items": config.item_name_collection or "not-configured",
             "entities": config.entity_name_collection or "not-configured",
         },
+        "access_policy": {
+            "version": config.acl_policy_version,
+            "enforcement": "pre_retrieval",
+            "identity_source": "signed_server_context",
+            "default_tenant": os.getenv("ACCESS_DEFAULT_TENANT", "public"),
+        },
+        "kg_graph_version": config.kg_graph_version,
         "query_config": {key: value for key, value in asdict(config).items() if key not in excluded_config},
     }
 
@@ -256,16 +290,72 @@ def run_evaluation(
     if getattr(provider, "snapshot_sha256", None):
         metadata["replay_snapshot_sha256"] = provider.snapshot_sha256
     summary = aggregate_results(evaluated)
+    # Quality/latency retain the documented representative-attempt semantics;
+    # billing/resource totals must include every executed attempt and turn.
+    summary["representative_model_usage"] = summary["model_usage"]
+    summary["model_usage"] = combine_model_usage(
+        (raw.get("response") or {}).get("diagnostics", {}).get("model_usage")
+        for raw in raw_results
+    )
+    summary["executed_attempt_count"] = len(raw_results)
+    execution_health = {
+        "provider_error_count": sum(bool(raw.get("error")) for raw in raw_results),
+        "failed_model_call_count": summary["model_usage"]["failed_call_count"],
+        "incomplete_turn_count": sum(
+            value is not True
+            for raw in raw_results
+            for value in (raw.get("response") or {}).get("diagnostics", {}).get("evaluation_usage", {}).get("turn_pipeline_complete", [])
+        ),
+        "usage_complete": summary["model_usage"]["usage_complete"],
+    }
+    if provider.name == "replay":
+        metadata["usage_scope"] = "recorded_snapshot"
+        metadata["cost_status"] = "unavailable"
+    if not summary["model_usage"]["usage_complete"] and provider.name != "contract":
+        metadata["cost_status"] = "unavailable"
+    if (
+        provider.name not in {"contract", "replay"}
+        and summary["model_usage"].get("cost_status") != "available"
+    ):
+        metadata["cost_status"] = "unavailable"
+    batch_budget = float((metadata.get("query_config") or {}).get("evaluation_max_batch_cost") or 0.0)
+    native_cost = float(summary["model_usage"].get("cost") or 0.0)
+    cost_available = (
+        metadata.get("cost_status") == "available"
+        and summary["model_usage"].get("cost_status") == "available"
+    )
+    summary["cost_budget"] = {
+        "limit": batch_budget,
+        "actual": native_cost,
+        "currency": summary["model_usage"].get("currency", ""),
+        "status": (
+            "not_applicable" if provider.name == "contract"
+            else "available" if cost_available
+            else "unavailable"
+        ),
+        "passed": (
+            bool(batch_budget > 0 and native_cost <= batch_budget)
+            if cost_available
+            else None
+        ),
+    }
     eligibility_reasons = _rag_quality_eligibility_reasons(
         summary=summary,
         results=evaluated,
         metadata=metadata,
     )
+    if execution_health["provider_error_count"]:
+        eligibility_reasons.append("one or more executed attempts failed (including non-representative attempts)")
+    if execution_health["failed_model_call_count"]:
+        eligibility_reasons.append("one or more executed model calls failed")
+    if execution_health["incomplete_turn_count"]:
+        eligibility_reasons.append("one or more conversation turns had an incomplete pipeline")
     report = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "suite": suite,
         "metadata": metadata,
         "summary": summary,
+        "execution_health": execution_health,
         "baseline_eligibility": {
             "rag_quality": not eligibility_reasons,
             "reasons": eligibility_reasons,
@@ -324,6 +414,11 @@ def _rag_quality_eligibility_reasons(
         reasons.append("one or more pipeline runs failed or silently degraded")
     if any(result.get("error") for result in results):
         reasons.append("one or more provider calls failed")
+    if is_full_pipeline and metadata.get("cost_status") != "available":
+        reasons.append("versioned monetary cost is unavailable")
+    cost_budget = summary.get("cost_budget") or {}
+    if is_full_pipeline and cost_budget.get("status") == "available" and cost_budget.get("passed") is not True:
+        reasons.append("evaluation batch monetary budget exceeded")
     return reasons
 
 
@@ -340,6 +435,7 @@ def compare_with_baseline(
         "evaluation_schema_version", "evaluator_version", "evaluator_fingerprint",
         "dataset_version", "dataset_sha256", "source_contract_sha256", "evaluation_scope",
         "provider", "prompt_sha256", "model", "item_model", "query_config", "attempts",
+        "usage_accounting_version", "usage_scope",
         "query_pipeline_sha256", "runtime_configuration_sha256", "pricing_configuration_sha256",
     ):
         if is_contract and field == "query_pipeline_sha256":
@@ -357,6 +453,27 @@ def compare_with_baseline(
             failures.append(
                 f"incompatible baseline: {field} {current_value!r} != {baseline_value!r}"
             )
+    live_comparison = (
+        candidate_metadata.get("provider") in {"service", "http"}
+        and baseline_metadata.get("provider") in {"service", "http"}
+    )
+    if live_comparison:
+        # The chunks collection and index version are the intentional A/B
+        # variable. Other collections must remain fixed, and both sides must
+        # still pin an explicit version rather than using an implicit default.
+        for label, metadata in (("candidate", candidate_metadata), ("baseline", baseline_metadata)):
+            if metadata.get("index_version") in {None, "", "unversioned"}:
+                failures.append(f"incompatible baseline: {label} index_version is not pinned")
+            collections = metadata.get("collections")
+            if not isinstance(collections, dict) or not collections.get("chunks"):
+                failures.append(f"incompatible baseline: {label} chunks collection is missing")
+        candidate_collections = candidate_metadata.get("collections") or {}
+        baseline_collections = baseline_metadata.get("collections") or {}
+        for collection in ("items", "entities"):
+            if candidate_collections.get(collection) != baseline_collections.get(collection):
+                failures.append(
+                    f"incompatible baseline: {collection} collection changed outside the A/B variable"
+                )
     if candidate.get("suite") is None or candidate.get("suite") != baseline.get("suite"):
         failures.append("incompatible baseline: missing or different suite")
 
@@ -440,28 +557,62 @@ def compare_with_baseline(
             f"{previous_latency * (1 + latency_ratio):.1f}ms"
         )
 
-    cost_allowance = float(gate_config.get("cost_max_increase_usd", 0.0))
-    cost_known = candidate_metadata.get("cost_status") == baseline_metadata.get("cost_status") == "estimated"
-    if "cost_max_increase_usd" in gate_config and not cost_known:
-        failures.append("cost comparison unavailable: configured positive pricing is required; zero is not evidence of free usage")
-    current_cost = float(
-        candidate_summary.get("model_usage", {}).get("estimated_cost_usd") or 0.0
-    )
-    previous_cost = float(
-        baseline_summary.get("model_usage", {}).get("estimated_cost_usd") or 0.0
-    )
-    if "cost_max_increase_usd" in gate_config and cost_known and (
-        "estimated_cost_usd" not in candidate_summary.get("model_usage", {})
-        or "estimated_cost_usd" not in baseline_summary.get("model_usage", {})
-        or not math.isfinite(current_cost) or not math.isfinite(previous_cost)
-        or min(current_cost, previous_cost) < 0
-    ):
-        failures.append("required monetary cost is unavailable or invalid")
-    if cost_known and current_cost > previous_cost + cost_allowance + 1e-12:
-        failures.append(
-            f"estimated cost regressed: ${current_cost:.6f} > "
-            f"${previous_cost + cost_allowance:.6f}"
+    native_allowances = gate_config.get("cost_max_increase_by_currency")
+    if isinstance(native_allowances, dict):
+        candidate_usage = candidate_summary.get("model_usage", {})
+        baseline_usage = baseline_summary.get("model_usage", {})
+        currency = str(candidate_usage.get("currency") or "")
+        previous_currency = str(baseline_usage.get("currency") or "")
+        cost_known = (
+            candidate_metadata.get("cost_status") == "available"
+            and baseline_metadata.get("cost_status") == "available"
+            and currency == previous_currency
+            and currency in native_allowances
         )
+        if not cost_known:
+            failures.append(
+                "cost comparison unavailable: matching versioned pricing and currency are required"
+            )
+        else:
+            current_cost = candidate_usage.get("cost")
+            previous_cost = baseline_usage.get("cost")
+            valid = all(
+                isinstance(value, (int, float)) and not isinstance(value, bool)
+                and math.isfinite(value) and value >= 0
+                for value in (current_cost, previous_cost)
+            )
+            if not valid:
+                failures.append("required monetary cost is unavailable or invalid")
+            else:
+                allowance = float(native_allowances[currency])
+                if float(current_cost) > float(previous_cost) + allowance + 1e-12:
+                    failures.append(
+                        f"cost regressed: {float(current_cost):.6f} {currency} > "
+                        f"{float(previous_cost) + allowance:.6f} {currency}"
+                    )
+    else:
+        cost_allowance = float(gate_config.get("cost_max_increase_usd", 0.0))
+        cost_known = candidate_metadata.get("cost_status") == baseline_metadata.get("cost_status") == "estimated"
+        if "cost_max_increase_usd" in gate_config and not cost_known:
+            failures.append("cost comparison unavailable: configured positive pricing is required; zero is not evidence of free usage")
+        current_cost = float(
+            candidate_summary.get("model_usage", {}).get("estimated_cost_usd") or 0.0
+        )
+        previous_cost = float(
+            baseline_summary.get("model_usage", {}).get("estimated_cost_usd") or 0.0
+        )
+        if "cost_max_increase_usd" in gate_config and cost_known and (
+            "estimated_cost_usd" not in candidate_summary.get("model_usage", {})
+            or "estimated_cost_usd" not in baseline_summary.get("model_usage", {})
+            or not math.isfinite(current_cost) or not math.isfinite(previous_cost)
+            or min(current_cost, previous_cost) < 0
+        ):
+            failures.append("required monetary cost is unavailable or invalid")
+        if cost_known and current_cost > previous_cost + cost_allowance + 1e-12:
+            failures.append(
+                f"estimated cost regressed: ${current_cost:.6f} > "
+                f"${previous_cost + cost_allowance:.6f}"
+            )
     return failures
 
 
@@ -479,6 +630,11 @@ def render_markdown(report: Dict[str, Any]) -> str:
     summary = report.get("summary") or {}
     metadata = report.get("metadata") or {}
     eligibility = report.get("baseline_eligibility") or {}
+    usage = summary.get("model_usage") or {}
+    if usage.get("cost_status") == "available":
+        cost_text = f"{float(usage.get('cost') or 0):.6f} {usage.get('currency', '')}"
+    else:
+        cost_text = "unavailable"
     lines = [
         "# Shopkeeper Brain evaluation report",
         "",
@@ -493,8 +649,10 @@ def render_markdown(report: Dict[str, Any]) -> str:
         f"- Index version: `{metadata.get('index_version', '')}`",
         f"- Cases: {summary.get('passed_count', 0)}/{summary.get('case_count', 0)} passed",
         f"- Latency p50/p95: {summary.get('latency_ms', {}).get('p50', 0)} / {summary.get('latency_ms', {}).get('p95', 0)} ms",
-        f"- Model calls/tokens/cost: {summary.get('model_usage', {}).get('call_count', 0)} / {summary.get('model_usage', {}).get('total_tokens', 0)} / ${summary.get('model_usage', {}).get('estimated_cost_usd', 0):.6f}",
+        f"- Model calls/tokens/cost: {usage.get('call_count', 0)} / {usage.get('total_tokens', 0)} / {cost_text}",
         f"- Cost status: `{metadata.get('cost_status', 'unavailable')}` (unavailable/zero does not mean free)",
+        f"- Pricing fingerprint/currency: `{metadata.get('pricing_configuration_sha256', '')}` / `{usage.get('currency', '')}`",
+        f"- Usage scope: `{metadata.get('usage_scope', 'unknown')}`; executed attempts: {summary.get('executed_attempt_count', 'unknown')}",
         f"- Valid RAG quality baseline: `{bool(eligibility.get('rag_quality'))}`",
         "",
         "## Baseline eligibility",

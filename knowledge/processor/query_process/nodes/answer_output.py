@@ -6,7 +6,15 @@ import re
 from typing import Any, Dict, List, Tuple
 
 from knowledge.processor.query_process.base import BaseNode
+from knowledge.processor.query_process.evidence import (
+    complete_structured_constraints,
+    verify_claim_citations,
+)
 from knowledge.processor.query_process.prompt import ANSWER_PROMPT
+from knowledge.processor.query_process.security import (
+    inspect_output_security,
+    inspect_untrusted_context,
+)
 from knowledge.processor.query_process.state import QueryGraphState
 from knowledge.utils.sse_util import SSEEvent, push_sse_event
 from knowledge.utils.query_result_utils import (
@@ -24,6 +32,7 @@ class AnswerOutputNode(BaseNode):
         is_stream = bool(state.get("is_stream"))
 
         # 1. 前面节点已经给出答案时，直接复用，不再调用大模型。
+        refusal_reason = ""
         if state.get("answer"):
             self._push_existing_answer(state)
 
@@ -36,12 +45,70 @@ class AnswerOutputNode(BaseNode):
                     "当前知识库没有检索到足够可靠的依据来回答这个问题。"
                     "你可以换一种问法、补充具体产品名称，或先导入相关资料。"
                 )
+                state["answer_behavior"] = "refuse"
             else:
                 prompt = self._build_prompt(state)
                 state["prompt"] = prompt
                 self._generate_answer(state, prompt)
 
-        state["sources"] = build_source_references(state.get("reranked_docs") or [])
+        evidence_docs = [
+            doc for doc in state.get("reranked_docs") or [] if isinstance(doc, dict)
+        ]
+        cited_docs: List[Dict[str, Any]] = []
+        if evidence_docs and state.get("answer") and not refusal_reason:
+            completed_answer, completion = complete_structured_constraints(
+                state.get("answer", ""),
+                evidence_docs,
+                state.get("rewritten_query") or state.get("original_query", ""),
+                self.config,
+            )
+            state["answer"] = completed_answer
+            state["constraint_completion"] = completion
+            verified_answer, cited_docs, verification = verify_claim_citations(
+                state.get("answer", ""), evidence_docs, self.config
+            )
+            state["answer"] = verified_answer
+            state["citation_verification"] = verification
+            state["claims"] = list(verification.get("claims") or [])
+        else:
+            state["constraint_completion"] = {
+                "version": "structured-constraint-completion-v1",
+                "enabled": bool(self.config.structured_constraint_completion),
+                "modes": [],
+                "candidate_count": 0,
+                "appended_count": 0,
+                "appended_claims": [],
+            }
+            state["citation_verification"] = {
+                "version": "claim-evidence-v1",
+                "claim_count": 0,
+                "kept_claim_count": 0,
+                "removed_claim_count": 0,
+                "cited_evidence_count": 0,
+                "claims": [],
+            }
+
+        # A successful injection or an accidental credential echo must still be
+        # stopped after generation. This validator looks for concrete secret
+        # material, not harmless discussion of words such as "API key".
+        state["output_security"] = inspect_output_security(state.get("answer", ""), self.config)
+        if state["output_security"].get("blocked"):
+            self.logger.error(
+                "Blocked generated answer by output security rules: %s",
+                state["output_security"].get("matched_rules"),
+            )
+            state["answer"] = (
+                "回答中检测到可能的敏感凭证内容，已阻止输出。"
+                "请通过受控的授权与审计渠道处理此请求。"
+            )
+            state["answer_behavior"] = "refuse"
+            state["claims"] = []
+            cited_docs = []
+            state["citation_verification"]["output_security_blocked"] = True
+
+        # Public citations include only evidence actually bound to a verified
+        # claim; unrelated rerank candidates remain available in diagnostics.
+        state["sources"] = build_source_references(cited_docs)
         proposed_images = self._extract_image_urls(state.get("answer", ""))
         cited_indices = {int(value) for value in re.findall(r"\[(\d+)\]", state.get("answer", ""))}
         supported_images = {
@@ -51,6 +118,11 @@ class AnswerOutputNode(BaseNode):
         state["image_urls"] = [url for url in proposed_images if url in supported_images]
         if len(state["image_urls"]) != len(proposed_images):
             self.logger.warning("Omitted %d image references without cited source assets", len(proposed_images) - len(state["image_urls"]))
+
+        # Stream only the final citation-verified and DLP-checked answer. Raw
+        # model chunks are untrusted and may split a credential across events.
+        if is_stream and state.get("answer"):
+            push_sse_event(task_id, SSEEvent.DELTA, {"delta": state["answer"]})
 
         # 3. 写入历史会话，保存用户问题和助手回答。
         self._write_history(state)
@@ -63,28 +135,22 @@ class AnswerOutputNode(BaseNode):
         return state
 
     def _get_refusal_reason(self, state: QueryGraphState) -> str:
-        """在无证据或所有精排证据都过低时拒答，降低幻觉风险。"""
+        """Use calibrated multi-signal confidence, never a raw reranker logit."""
 
         docs = [doc for doc in state.get("reranked_docs") or [] if isinstance(doc, dict)]
         graph_evidence = state.get("kg_triples") or []
         if not docs and not graph_evidence:
             return "empty_context"
 
-        numeric_scores: List[float] = []
-        for doc in docs:
-            try:
-                if doc.get("score") is not None:
-                    numeric_scores.append(float(doc["score"]))
-            except (TypeError, ValueError):
-                continue
+        decision = state.get("evidence_decision") or {}
+        if isinstance(decision, dict) and "should_answer" in decision:
+            return "" if decision.get("should_answer") else str(
+                decision.get("reason") or "low_evidence_confidence"
+            )
 
-        if (
-            numeric_scores
-            and not graph_evidence
-            and max(numeric_scores) < self.config.refusal_min_score
-        ):
-            return f"top_score_below_{self.config.refusal_min_score}"
-        return ""
+        # Missing a Stage 2 decision is a pipeline-contract failure. Fail closed
+        # instead of silently reviving the legacy raw-score threshold.
+        return "missing_evidence_decision"
 
     def _push_existing_answer(self, state: QueryGraphState) -> None:
         """已有答案时的兼容处理。"""
@@ -97,7 +163,9 @@ class AnswerOutputNode(BaseNode):
         try:
             from knowledge.utils.llm_utils import get_llm_client
 
-            llm_client = get_llm_client(trace_id=state.get("task_id", ""))
+            llm_client = get_llm_client(
+                trace_id=state.get("task_id", ""), operation="answer"
+            )
         except Exception as exc:
             self.logger.error("LLM 客户端初始化失败: %s", exc)
             state["answer"] = "抱歉，LLM 客户端初始化失败，暂时无法生成回答。"
@@ -120,22 +188,40 @@ class AnswerOutputNode(BaseNode):
         item_names = state.get("item_names") or []
 
         # 2. 格式化重排序后的文档。
-        context_str, char_budget = self._format_reranked_docs(
+        context_str, char_budget, document_audit = self._format_reranked_docs(
             state.get("reranked_docs") or [],
             char_budget,
         )
 
         # 3. 格式化历史对话。
-        history_str, char_budget = self._format_chat_history(
+        history_str, char_budget, history_audit = self._format_chat_history(
             state.get("history") or [],
             char_budget,
         )
 
         # 4. 格式化知识图谱三元组。
-        graph_str, char_budget = self._format_kg_triples(
+        graph_str, char_budget, graph_audit = self._format_kg_triples(
             state.get("kg_triples") or [],
             char_budget,
         )
+        prior_context_security = dict(state.get("context_security") or {})
+        answer_context_blocked = sum(
+            int(audit.get("blocked_count", 0))
+            for audit in (document_audit, history_audit, graph_audit)
+        )
+        state["context_security"] = {
+            **prior_context_security,
+            "version": "untrusted-context-guard-v1",
+            "enabled": bool(self.config.security_context_guard_enabled),
+            "answer_context": {
+                "documents": document_audit,
+                "history": history_audit,
+                "knowledge_graph": graph_audit,
+                "blocked_count": answer_context_blocked,
+            },
+            "blocked_count": int(prior_context_security.get("blocked_count", 0))
+            + answer_context_blocked,
+        }
 
         # 5. 填充最终提示词模板。
         return ANSWER_PROMPT.format(
@@ -152,9 +238,11 @@ class AnswerOutputNode(BaseNode):
         self,
         chat_history: List[Dict[str, Any]],
         char_budget: int,
-    ) -> Tuple[str, int]:
+    ) -> Tuple[str, int, Dict[str, Any]]:
         formatted_lines: List[str] = []
         used_chars = 0
+        blocked_count = 0
+        inspected_count = 0
         role_label_map = {"user": "用户", "assistant": "助手"}
 
         for message in chat_history:
@@ -165,6 +253,12 @@ class AnswerOutputNode(BaseNode):
             text = self._clean_text(message.get("text"))
             if not text or role not in role_label_map:
                 continue
+            inspected_count += 1
+            if self.config.security_context_guard_enabled:
+                audit = inspect_untrusted_context(text, self.config)
+                if audit["blocked"]:
+                    blocked_count += 1
+                    continue
 
             formatted_line = f"{role_label_map[role]}: {text}"
             if used_chars + len(formatted_line) > char_budget:
@@ -173,15 +267,20 @@ class AnswerOutputNode(BaseNode):
             formatted_lines.append(formatted_line)
             used_chars += len(formatted_line) + 1
 
-        return "\n".join(formatted_lines), char_budget - used_chars
+        return "\n".join(formatted_lines), char_budget - used_chars, {
+            "inspected_count": inspected_count,
+            "blocked_count": blocked_count,
+        }
 
     def _format_reranked_docs(
         self,
         reranked_docs: List[Dict[str, Any]],
         char_budget: int,
-    ) -> Tuple[str, int]:
+    ) -> Tuple[str, int, Dict[str, Any]]:
         formatted_lines: List[str] = []
         used_chars = 0
+        blocked_count = 0
+        inspected_count = 0
 
         for index, doc in enumerate(reranked_docs, 1):
             if not isinstance(doc, dict):
@@ -190,6 +289,12 @@ class AnswerOutputNode(BaseNode):
             content = self._clean_text(doc.get("content"))
             if not content:
                 continue
+            inspected_count += 1
+            if self.config.security_context_guard_enabled:
+                audit = inspect_untrusted_context(content, self.config)
+                if audit["blocked"]:
+                    blocked_count += 1
+                    continue
 
             # 1. 构建元信息标签，方便模型知道每段内容的来源。
             meta_tags = [f"[{index}]"]
@@ -197,6 +302,9 @@ class AnswerOutputNode(BaseNode):
                 ("source", "[source={}]"),
                 ("chunk_id", "[chunk_id={}]"),
                 ("url", "[url={}]"),
+                ("domain", "[domain={}]"),
+                ("source_type", "[source_type={}]"),
+                ("retrieved_date", "[retrieved_date={}]"),
                 ("title", "[title={}]"),
                 ("file_title", "[file={}]"),
                 ("parent_title", "[section={}]"),
@@ -221,27 +329,41 @@ class AnswerOutputNode(BaseNode):
             formatted_lines.append(doc_entry)
             used_chars += len(doc_entry) + 2
 
-        return "\n\n".join(formatted_lines), char_budget - used_chars
+        return "\n\n".join(formatted_lines), char_budget - used_chars, {
+            "inspected_count": inspected_count,
+            "blocked_count": blocked_count,
+        }
 
-    @staticmethod
     def _format_kg_triples(
+        self,
         kg_triples: List[Any],
         char_budget: int,
-    ) -> Tuple[str, int]:
+    ) -> Tuple[str, int, Dict[str, Any]]:
         formatted_lines: List[str] = []
         used_chars = 0
+        blocked_count = 0
+        inspected_count = 0
 
         for triple in kg_triples:
             triple_text = (str(triple) if triple is not None else "").strip()
             if not triple_text:
                 continue
+            inspected_count += 1
+            if self.config.security_context_guard_enabled:
+                audit = inspect_untrusted_context(triple_text, self.config)
+                if audit["blocked"]:
+                    blocked_count += 1
+                    continue
             if used_chars + len(triple_text) > char_budget:
                 break
 
             formatted_lines.append(triple_text)
             used_chars += len(triple_text) + 1
 
-        return "\n".join(formatted_lines), char_budget - used_chars
+        return "\n".join(formatted_lines), char_budget - used_chars, {
+            "inspected_count": inspected_count,
+            "blocked_count": blocked_count,
+        }
 
     def _invoke_generate(self, llm_client: Any, prompt: str) -> str:
         self.log_step("generate", "生成答案")
@@ -253,7 +375,7 @@ class AnswerOutputNode(BaseNode):
             return "抱歉，生成回答时出现错误。"
 
     def _stream_generate(self, llm_client: Any, prompt: str, task_id: str) -> str:
-        """流式生成：每拿到一个 chunk，就通过 SSE 推送 delta 事件。"""
+        """Buffer model chunks until citation verification and output DLP pass."""
 
         accumulated_answer = ""
         try:
@@ -263,7 +385,6 @@ class AnswerOutputNode(BaseNode):
                     continue
 
                 accumulated_answer += delta_text
-                push_sse_event(task_id, SSEEvent.DELTA, {"delta": delta_text})
         except Exception as exc:
             self.logger.error("流式生成出错: %s", exc)
 
@@ -293,11 +414,19 @@ class AnswerOutputNode(BaseNode):
         try:
             from knowledge.utils.mongo_history_utils import save_chat_message
 
+            policy = state.get("policy_decision") or {}
+            if policy.get("intent") == "permission_sensitive":
+                history_query = "[敏感请求已由安全策略拦截]"
+            elif policy.get("injection_detected"):
+                history_query = state.get("policy_query") or "[提示注入已由安全策略拦截]"
+            else:
+                history_query = state.get("original_query", "")
+
             # 1. 写用户问题；如果前置节点已经保存过 message_id，则更新该记录。
             save_chat_message(
                 session_id=session_id,
                 role="user",
-                text=state.get("original_query", ""),
+                text=history_query,
                 rewritten_query=rewritten_query,
                 item_names=item_names,
                 message_id=state.get("message_id", ""),

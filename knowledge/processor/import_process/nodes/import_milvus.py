@@ -48,6 +48,8 @@ SCALAR_FIELDS: Sequence[ScalarFieldSpec] = (
     ScalarFieldSpec("part", DataType.INT64),
     ScalarFieldSpec("file_title", DataType.VARCHAR, MAX_VARCHAR_LENGTH),
     ScalarFieldSpec("item_name", DataType.VARCHAR, MAX_VARCHAR_LENGTH),
+    ScalarFieldSpec("tenant_id", DataType.VARCHAR, 128),
+    ScalarFieldSpec("visibility", DataType.VARCHAR, 16),
     ScalarFieldSpec("source_uri", DataType.VARCHAR, MAX_VARCHAR_LENGTH),
     ScalarFieldSpec("source_sha256", DataType.VARCHAR, 64),
     ScalarFieldSpec("section_id", DataType.VARCHAR, 128),
@@ -232,6 +234,14 @@ class ImportMilvusNode(BaseNode):
                 kwargs["max_length"] = spec.max_length
             schema.add_field(**kwargs)
 
+        schema.add_field(
+            field_name="acl_readers",
+            datatype=DataType.ARRAY,
+            element_type=DataType.VARCHAR,
+            max_capacity=128,
+            max_length=256,
+        )
+
         # Step 5.4: 添加稀疏向量字段，用于关键词/字面匹配。
         schema.add_field(
             field_name="sparse_vector",
@@ -327,6 +337,12 @@ class ImportMilvusNode(BaseNode):
             "part": self._int_value(chunk.get("part", 0)),
             "file_title": self._string_value(chunk.get("file_title")),
             "item_name": self._string_value(chunk.get("item_name")),
+            "tenant_id": self._string_value(chunk.get("tenant_id") or "public")[:128],
+            "visibility": self._string_value(chunk.get("visibility") or "public")[:16],
+            "acl_readers": [
+                self._string_value(value)[:256]
+                for value in list(chunk.get("acl_readers") or [])[:128]
+            ],
             "source_uri": self._string_value(chunk.get("source_uri")),
             "source_sha256": self._string_value(chunk.get("source_sha256")),
             "section_id": self._string_value(chunk.get("section_id")),

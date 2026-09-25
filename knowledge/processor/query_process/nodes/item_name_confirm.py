@@ -54,7 +54,12 @@ class ItemExtractor:
             from langchain_core.messages import HumanMessage, SystemMessage
             from knowledge.utils.llm_utils import get_llm_client
 
-            llm_client = get_llm_client(model, json_mode=True, trace_id=trace_id)
+            llm_client = get_llm_client(
+                model,
+                json_mode=True,
+                trace_id=trace_id,
+                operation="query_rewrite",
+            )
             response = llm_client.invoke(
                 [
                     SystemMessage(content=self._SYSTEM_PROMPT),
@@ -359,12 +364,20 @@ class ItemNameConfirmNode(BaseNode):
 
     def process(self, state: QueryGraphState) -> QueryGraphState:
         session_id = state.get("session_id", "")
-        query = state.get("original_query", "")
+        # The immutable original remains available for audit/history, while the
+        # policy-clean query is the only text allowed into LLM rewrite/retrieval.
+        original_query = state.get("original_query", "")
+        query = state.get("policy_query") or original_query
+        history_query = (
+            query
+            if (state.get("policy_decision") or {}).get("injection_detected")
+            else original_query
+        )
 
         history = self.history_service.fetch(session_id)
         message_id = self.history_service.save_user_message(
             session_id=session_id,
-            query=query,
+            query=history_query,
             item_names=state.get("item_names", []),
         )
         if message_id:
@@ -396,7 +409,7 @@ class ItemNameConfirmNode(BaseNode):
                 confirmed, options = [], []
 
         self._decide(state, confirmed, options, rewritten_query, history)
-        self._write_history(state, session_id, query, rewritten_query, message_id)
+        self._write_history(state, session_id, history_query, rewritten_query, message_id)
         state["history"] = self.history_service.fetch(session_id)
         return state
 

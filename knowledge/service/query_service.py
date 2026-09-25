@@ -53,6 +53,7 @@ class QueryService:
         is_stream: bool,
         item_names: List[str] | None = None,
         include_evaluation_trace: bool = False,
+        access_context: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
         """执行 LangGraph 查询流程。"""
 
@@ -72,13 +73,12 @@ class QueryService:
                 item_names=item_names or [],
                 is_stream=is_stream,
                 task_id=task_id,
+                access_context=access_context or {},
             )
             final_state["model_usage"] = finish_model_trace(task_id)
             answer = str(final_state.get("answer", "") or "")
             image_urls = list(final_state.get("image_urls") or [])
-            sources = list(final_state.get("sources") or []) or self._build_sources(
-                final_state.get("reranked_docs") or []
-            )
+            sources = self._select_public_sources(final_state)
             diagnostics = self._build_diagnostics(
                 task_id,
                 final_state,
@@ -173,6 +173,15 @@ class QueryService:
     @staticmethod
     def _build_sources(raw_docs: Any) -> List[Dict[str, Any]]:
         return build_source_references(raw_docs)
+
+    @staticmethod
+    def _select_public_sources(final_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Never replace an intentionally empty verified citation set."""
+
+        if isinstance(final_state.get("sources"), list):
+            return list(final_state["sources"])
+        # Compatibility only for callers that predate the Stage 2 answer node.
+        return build_source_references(final_state.get("reranked_docs") or [])
 
     @staticmethod
     def _build_diagnostics(

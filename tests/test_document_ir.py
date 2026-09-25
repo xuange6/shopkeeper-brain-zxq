@@ -714,10 +714,16 @@ class DocumentIRTests(unittest.TestCase):
         fields = {field["field_name"]: field for field in fake.schema_fields}
         self.assertEqual(fields["pk"]["auto_id"], True)
         self.assertNotIn("auto_id", fields["chunk_id"])
+        self.assertIn("tenant_id", fields)
+        self.assertIn("visibility", fields)
+        self.assertEqual(fields["acl_readers"]["datatype"], DataType.ARRAY)
         self.assertIn("page_uids", fields)
         self.assertIn("block_lineage_ids", fields)
         self.assertEqual(fields["part"]["datatype"], DataType.INT64)
         self.assertEqual(fake.rows[0]["chunk_id"], row["chunk_id"])
+        self.assertEqual(fake.rows[0]["tenant_id"], "public")
+        self.assertEqual(fake.rows[0]["visibility"], "public")
+        self.assertEqual(fake.rows[0]["acl_readers"], [])
 
     def test_markdown_import_nodes_write_ir_and_index_projection(self) -> None:
         with TemporaryDirectory() as temporary_dir:

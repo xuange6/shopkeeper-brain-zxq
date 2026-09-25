@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
-import json
 from typing import List, Optional
 
 from knowledge.processor.query_process.base import BaseNode, setup_logging
 from knowledge.processor.query_process.state import QueryGraphState
+from knowledge.processor.query_process.nodes.retrieval_plan import channel_enabled
+from knowledge.security.access_control import (
+    AccessContext,
+    build_milvus_access_filter,
+    build_milvus_item_filter,
+    combine_milvus_filters,
+)
 
 
 class SearchEmbeddingNode(BaseNode):
@@ -42,6 +48,13 @@ class SearchEmbeddingNode(BaseNode):
     ]
 
     def process(self, state: QueryGraphState) -> QueryGraphState:
+        if not channel_enabled(state, "direct"):
+            return {
+                "embedding_chunks": [],
+                "retrieval_status": {
+                    self.name: {"status": "skipped", "reason": "disabled by retrieval plan"}
+                },
+            }
         query = state.get("rewritten_query") or state.get("original_query") or ""
         item_names = state.get("item_names")
         collection_name = self.config.chunks_collection or "chunks_test"
@@ -66,7 +79,7 @@ class SearchEmbeddingNode(BaseNode):
             self.log_step("step_1", f"查询向量化: {query}")
             embeddings = generate_hybrid_embeddings([query])
 
-            filter_expr = self._build_filter_expr(item_names)
+            filter_expr = self._build_filter_expr(item_names, state.get("access_context"))
             self.logger.debug("过滤表达式: %s", filter_expr)
 
             reqs = build_hybrid_search_requests(
@@ -104,13 +117,16 @@ class SearchEmbeddingNode(BaseNode):
             }
 
     @staticmethod
-    def _build_filter_expr(item_names: Optional[List[str]]) -> Optional[str]:
-        """将商品名列表转成 Milvus 标量过滤表达式。"""
-        if not item_names:
-            return None
+    def _build_filter_expr(
+        item_names: Optional[List[str]],
+        access_context: object = None,
+    ) -> Optional[str]:
+        """Combine product scope and mandatory tenant/ACL pre-filter."""
 
-        quoted = ", ".join(json.dumps(name, ensure_ascii=False) for name in item_names)
-        return f"item_name in [{quoted}]"
+        return combine_milvus_filters(
+            build_milvus_item_filter(item_names),
+            build_milvus_access_filter(AccessContext.from_state(access_context)),
+        )
 
 
 _node_instance = SearchEmbeddingNode()

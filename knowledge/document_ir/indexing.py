@@ -3,13 +3,26 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Iterable
 
 from knowledge.document_ir.citations import build_chunk_citation
 from knowledge.document_ir.models import DocumentIR
+from knowledge.security.access_control import normalize_access_metadata
 
 
-def chunks_to_index_rows(document: DocumentIR, item_name: str = "") -> list[dict[str, Any]]:
+def chunks_to_index_rows(
+    document: DocumentIR,
+    item_name: str = "",
+    *,
+    tenant_id: str = "public",
+    visibility: str = "public",
+    acl_readers: Iterable[str] | None = None,
+) -> list[dict[str, Any]]:
+    access = normalize_access_metadata(
+        tenant_id=tenant_id,
+        visibility=visibility,
+        acl_readers=acl_readers,
+    )
     rows: list[dict[str, Any]] = []
     for chunk in document.chunks:
         citation = build_chunk_citation(document, chunk)
@@ -34,6 +47,7 @@ def chunks_to_index_rows(document: DocumentIR, item_name: str = "") -> list[dict
                 "part": chunk.part,
                 "file_title": document.source.filename.rsplit(".", 1)[0],
                 "item_name": item_name,
+                **access,
                 "source_uri": document.source.uri,
                 "source_sha256": document.source.sha256,
                 "section_id": chunk.section_id,

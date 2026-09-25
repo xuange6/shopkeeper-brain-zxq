@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import mimetypes
 from pathlib import Path
 
 from knowledge.document_ir.adapters.common import UnsafeImagePath, resolve_image_asset
@@ -13,6 +12,26 @@ from knowledge.processor.import_process.base import BaseNode
 from knowledge.processor.import_process.exceptions import ValidationError
 from knowledge.processor.import_process.state import ImportGraphState
 from knowledge.utils.minio_util import get_minio_client
+
+
+_IMAGE_CONTENT_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".bmp": "image/bmp",
+    ".webp": "image/webp",
+    ".tif": "image/tiff",
+    ".tiff": "image/tiff",
+}
+
+
+def _asset_content_type(path: Path) -> str:
+    # Only label validated raster paths as images. Do not trust a serialized IR
+    # MIME value or platform MIME registrations (which can name active content).
+    # Unknown extensions are rejected by resolve_image_asset today; retaining a
+    # safe fallback prevents an expanded path allowlist from enabling HTML/SVG.
+    return _IMAGE_CONTENT_TYPES.get(path.suffix.lower(), "application/octet-stream")
 
 
 class DocumentEnrichNode(BaseNode):
@@ -74,7 +93,7 @@ class DocumentEnrichNode(BaseNode):
 
         document.metadata["enrichment"] = {
             "name": "shopkeeper.asset_enrichment",
-            "version": "1.1",
+            "version": "1.2",
             "image_count": len(image_blocks),
             "table_count": len(table_blocks),
             "uploaded_image_count": uploaded,
@@ -83,6 +102,9 @@ class DocumentEnrichNode(BaseNode):
         state["chunks"] = chunks_to_index_rows(
             document,
             item_name=state.get("item_name", ""),
+            tenant_id=state.get("tenant_id", "public"),
+            visibility=state.get("visibility", "public"),
+            acl_readers=state.get("acl_readers") or [],
         )
         state["image_summaries"] = image_summaries
         state["image_contexts"] = [
@@ -130,14 +152,16 @@ class DocumentEnrichNode(BaseNode):
         for block, path in safe_assets:
             suffix = path.suffix.lower()
             object_name = f"documents/{document.document_id}/assets/{block.id}{suffix}"
+            content_type = _asset_content_type(path)
             try:
-                client.fput_object(self.config.minio_bucket, object_name, str(path))
+                client.fput_object(
+                    self.config.minio_bucket, object_name, str(path),
+                    content_type=content_type,
+                )
                 block.image.uri = (
                     f"{self.config.get_minio_base_url()}/{self.config.minio_bucket}/{object_name}"
                 )
-                block.image.mime_type = (
-                    mimetypes.guess_type(path.name)[0] or block.image.mime_type
-                )
+                block.image.mime_type = content_type
                 uploaded += 1
             except Exception as exc:
                 self.logger.warning("image upload failed for %s: %s", block.id, exc)

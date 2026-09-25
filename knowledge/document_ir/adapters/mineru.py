@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.metadata
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,8 @@ from knowledge.document_ir.models import (
 
 
 _FURNITURE_TYPES = {"page_header", "page_footer", "page_number", "page_aside_text"}
+_NUMBERED_HEADING = re.compile(r"^(\d+(?:\.\d+)*)\s+\S")
+_CAPTION_SECTION_RULE = "mineru.numbered_table_caption_next_sibling/1.0"
 
 
 class MinerUAdapter:
@@ -99,6 +102,20 @@ class MinerUAdapter:
         blocks: list[DocumentBlock] = []
         errors: list[ParseError] = []
         section_occurrences: dict[tuple[str, ...], int] = {}
+        # Some artifacts flatten every heading to level 1 and absorb a section
+        # heading into the following table caption. Recover only an unambiguous
+        # next numbered sibling; do not invent a full outline from typography.
+        parser_headings = [
+            item
+            for page in pages if isinstance(page, list)
+            for item in page if isinstance(item, dict) and item.get("type") == "title"
+        ]
+        flat_headings = bool(parser_headings) and all(
+            str((item.get("content") or {}).get("level")) == "1"
+            for item in parser_headings
+        )
+        numbered_anchor: tuple[tuple[int, ...], Section, int] | None = None
+        recovered_sections = 0
 
         for page_index, raw_page in enumerate(pages):
             page_number = page_index + 1
@@ -121,15 +138,32 @@ class MinerUAdapter:
                     continue
 
                 heading_level = self._heading_level(item)
-                if heading_level:
-                    title = normalized_text(text) or "Untitled"
+                section_level = heading_level
+                section_title = text
+                section_inference: dict[str, Any] = {}
+                if flat_headings and table and numbered_anchor:
+                    caption = self._next_sibling_caption(table, numbered_anchor, page_number)
+                    if caption:
+                        section_title = caption
+                        section_level = numbered_anchor[1].level
+                        section_inference = {
+                            "rule": _CAPTION_SECTION_RULE,
+                            "original_section_id": current_section.id,
+                            "anchor_section_id": numbered_anchor[1].id,
+                            "parser_heading_level": heading_level,
+                            "derived_section_level": section_level,
+                            "caption_index": 0,
+                        }
+                        recovered_sections += 1
+                if section_level:
+                    title = normalized_text(section_title) or "Untitled"
                     for level in list(hierarchy):
-                        if level >= heading_level:
+                        if level >= section_level:
                             hierarchy.pop(level, None)
                     parent = next(
                         (
                             hierarchy[level]
-                            for level in range(heading_level - 1, 0, -1)
+                            for level in range(section_level - 1, 0, -1)
                             if level in hierarchy
                         ),
                         sections[0],
@@ -145,13 +179,16 @@ class MinerUAdapter:
                         id=section_id,
                         parent_id=parent.id,
                         title=title,
-                        level=heading_level,
+                        level=section_level,
                         title_path=title_path,
                         order=len(sections),
                     )
                     sections.append(current_section)
                     section_by_id[section_id] = current_section
-                    hierarchy[heading_level] = current_section
+                    hierarchy[section_level] = current_section
+                    number = self._heading_number(title)
+                    if number is not None:
+                        numbered_anchor = (number, current_section, page_number)
 
                 start = sum(len(part) for part in raw_parts)
                 rendered = text.strip()
@@ -196,6 +233,7 @@ class MinerUAdapter:
                     metadata={
                         "mineru_type": item_type,
                         "mineru_sub_type": str(item.get("sub_type") or ""),
+                        **({"section_inference": section_inference} if section_inference else {}),
                     },
                 )
                 blocks.append(block)
@@ -246,8 +284,46 @@ class MinerUAdapter:
                 "content_list_path": str(content_list_path.resolve()),
                 "middle_path": str(middle_path.resolve()) if middle_path else "",
                 **middle_metadata,
+                "section_recovery": {
+                    "rule": _CAPTION_SECTION_RULE,
+                    "flat_parser_headings": flat_headings,
+                    "recovered_table_sections": recovered_sections,
+                },
             },
         )
+
+    @staticmethod
+    def _heading_number(title: str) -> tuple[int, ...] | None:
+        match = _NUMBERED_HEADING.match(normalized_text(title))
+        try:
+            return tuple(int(part) for part in match.group(1).split(".")) if match else None
+        except ValueError:
+            # An untrusted caption with an excessively long integer is not an
+            # outline anchor. Preserve it as ordinary source text instead.
+            return None
+
+    @classmethod
+    def _next_sibling_caption(
+        cls,
+        table: TablePayload,
+        anchor: tuple[tuple[int, ...], Section, int],
+        page_number: int,
+    ) -> str | None:
+        if len(table.captions) != 1:
+            return None
+        caption = table.captions[0]
+        number = cls._heading_number(caption)
+        previous, _, previous_page = anchor
+        if (
+            number is not None
+            and len(number) >= 2
+            and len(number) == len(previous)
+            and number[:-1] == previous[:-1]
+            and number[-1] == previous[-1] + 1
+            and 0 <= page_number - previous_page <= 1
+        ):
+            return caption
+        return None
 
     @staticmethod
     def _load_middle(path: Path | None) -> tuple[dict[int, tuple[float, float]], dict[str, Any]]:

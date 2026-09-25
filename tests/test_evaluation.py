@@ -47,6 +47,7 @@ def comparison_report() -> dict:
         "dataset_version", "dataset_sha256", "source_contract_sha256", "evaluation_scope",
         "provider", "prompt_sha256", "model", "item_model", "query_pipeline_sha256",
         "runtime_configuration_sha256", "pricing_configuration_sha256",
+        "usage_accounting_version", "usage_scope",
     )}
     metadata.update(query_config={"rrf_k": 60}, attempts=1, cost_status="estimated")
     return {
@@ -221,6 +222,44 @@ class EvaluationTests(unittest.TestCase):
         self.assertEqual(result["metrics"]["citation_correctness"], 1.0)
         self.assertEqual(result["metrics"]["faithfulness"], 1.0)
 
+    def test_equivalent_square_meter_unit_renderings_score_the_same(self) -> None:
+        case = {
+            "expected": {
+                "behavior": "answer",
+                "relevant_sources": [{"file_title": "manual", "title": "weights"}],
+                "facts": [
+                    {"any": ["350g/m2"], "source_titles": ["weights"]},
+                    {"any": ["90g/㎡"], "source_titles": ["weights"]},
+                ],
+                "requires_citation": True,
+            }
+        }
+        response = {
+            "answer": "上限为 350 g/m² [1]。下限为 90 g/m² [1]。",
+            "sources": [{
+                "file_title": "manual",
+                "title": "weights",
+                "preview": "重量范围为 90 g/m2 到 350 g/m2。",
+            }],
+        }
+        metrics = answer_metrics(case, response)
+        self.assertEqual(metrics["answer_correctness"], 1.0)
+        self.assertEqual(metrics["faithfulness"], 1.0)
+
+    def test_equivalent_chinese_modal_wording_scores_the_same(self) -> None:
+        case = {
+            "expected": {
+                "behavior": "answer",
+                "facts": [{"any": ["不需要安装额外的驱动"]}],
+                "requires_citation": False,
+            }
+        }
+        metrics = answer_metrics(
+            case,
+            {"answer": "本设备无需安装额外的驱动程序或软件。", "sources": []},
+        )
+        self.assertEqual(metrics["answer_correctness"], 1.0)
+
     def test_gate_catches_an_injected_retrieval_regression(self) -> None:
         baseline = comparison_report()
         candidate = copy.deepcopy(baseline)
@@ -336,6 +375,25 @@ class EvaluationTests(unittest.TestCase):
         candidate["summary"]["metrics"]["recall@5"] = float("nan")
         self.assertTrue(any("not finite" in failure for failure in compare_with_baseline(candidate, baseline, gate)))
 
+    def test_live_gate_allows_only_chunks_index_as_ab_variable(self) -> None:
+        baseline = comparison_report()
+        candidate = copy.deepcopy(baseline)
+        for report, version, chunks in (
+            (baseline, "control-v1", "chunks-control"),
+            (candidate, "candidate-v1", "chunks-candidate"),
+        ):
+            report["metadata"]["provider"] = "service"
+            report["metadata"]["index_version"] = version
+            report["metadata"]["collections"] = {
+                "chunks": chunks, "items": "items", "entities": "entities"
+            }
+        self.assertEqual(compare_with_baseline(candidate, baseline, {}), [])
+        candidate["metadata"]["collections"]["entities"] = "different-entities"
+        self.assertTrue(any(
+            "entities collection" in failure
+            for failure in compare_with_baseline(candidate, baseline, {})
+        ))
+
     def test_unknown_pricing_is_not_counted_as_free(self) -> None:
         baseline = comparison_report()
         baseline["metadata"]["cost_status"] = "unavailable"
@@ -373,6 +431,8 @@ class EvaluationTests(unittest.TestCase):
         with patch.dict(os.environ, {
             "MODEL": "different-live-model", "LLM_INPUT_USD_PER_1M": "999",
             "RAG_REFUSAL_MIN_SCORE": "999", "CHUNKS_COLLECTION": "private-live-index",
+            "RAG_SECURITY_FUZZY_THRESHOLD": "0.99",
+            "RAG_SECURITY_CONTEXT_GUARD": "false",
             "OPENAI_API_KEY": "private-not-for-report", "INDEX_VERSION": "private-live-index",
             "LLM_DEFAULT_TEMPERATURE": "9", "BGE_M3_PATH": "private/model/location",
         }):

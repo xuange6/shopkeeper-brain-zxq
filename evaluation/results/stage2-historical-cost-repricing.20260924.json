@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0",
+  "scope": "retrospective_repricing_only",
+  "is_new_model_execution": false,
+  "is_provider_invoice": false,
+  "pricing": {
+    "provider": "aliyun-bailian",
+    "region": "cn-beijing",
+    "model": "qwen-flash",
+    "snapshot": "qwen-flash-2025-07-28",
+    "currency": "CNY",
+    "billing_unit": "per_1m_tokens",
+    "input_rate": 0.15,
+    "output_rate": 1.5,
+    "effective_date": "2026-09-24",
+    "source": "https://help.aliyun.com/zh/model-studio/qwen-flash",
+    "pricing_fingerprint": "dff7920ae0a2f1374786cb4e00169c25ed772923f8c493952fe3af7f348eab24"
+  },
+  "control": {
+    "source_report": "evaluation/results/stage1-control-v4.20260923.service.core.json",
+    "input_tokens": 17808,
+    "output_tokens": 1926,
+    "total_tokens": 19734,
+    "repriced_cost": 0.0055602
+  },
+  "candidate": {
+    "source_report": "evaluation/results/stage1-ir-shadow-v4.20260923.service.core.json",
+    "input_tokens": 18393,
+    "output_tokens": 2619,
+    "total_tokens": 21012,
+    "repriced_cost": 0.00668745
+  },
+  "candidate_minus_control": {
+    "input_tokens": 585,
+    "output_tokens": 693,
+    "total_tokens": 1278,
+    "repriced_cost": 0.00112725
+  }
+}

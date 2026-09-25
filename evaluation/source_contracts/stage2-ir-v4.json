@@ -1,0 +1,69 @@
+{
+  "schema_version": "1.0",
+  "dataset_sha256": "2ae67e7c4a3c98fa3329cf561553123172bd306b65694ad98dd4da053d724275",
+  "cases": {
+    "table_media_weight": {
+      "source_aliases": [
+        {
+          "expected": {
+            "file_title": "hak180使用说明书",
+            "title": "# 8.2.2 打印质量问题-2"
+          },
+          "actual": {
+            "file_title": "hak180使用说明书",
+            "document_id": "doc_f84fe61b98d713e67f373ccb",
+            "section_id": "sec_079478a03cfe25f9f4a95359",
+            "chunk_id": "chk_86f2a0d68905dec1171bf6fd"
+          }
+        }
+      ],
+      "fact_source_aliases": [
+        {
+          "expected_title": "# 8.2.2 打印质量问题-2",
+          "actual": {
+            "file_title": "hak180使用说明书",
+            "document_id": "doc_f84fe61b98d713e67f373ccb",
+            "section_id": "sec_079478a03cfe25f9f4a95359",
+            "chunk_id": "chk_86f2a0d68905dec1171bf6fd"
+          }
+        }
+      ]
+    },
+    "safety_hot_internals": {
+      "source_aliases": [
+        {
+          "expected": {
+            "file_title": "hak180使用说明书",
+            "parent_title": "# 警告"
+          },
+          "actual": {
+            "file_title": "hak180使用说明书",
+            "document_id": "doc_f84fe61b98d713e67f373ccb",
+            "section_id": "sec_f683a1a522b5ffbf760b81a3",
+            "chunk_id": "chk_4335370e863fa8c8a7919475"
+          }
+        }
+      ],
+      "fact_source_aliases": [
+        {
+          "expected_title": "# 警告",
+          "actual": {
+            "file_title": "hak180使用说明书",
+            "document_id": "doc_f84fe61b98d713e67f373ccb",
+            "section_id": "sec_f683a1a522b5ffbf760b81a3",
+            "chunk_id": "chk_4335370e863fa8c8a7919475"
+          }
+        },
+        {
+          "expected_title": "# 警告-1",
+          "actual": {
+            "file_title": "hak180使用说明书",
+            "document_id": "doc_f84fe61b98d713e67f373ccb",
+            "section_id": "sec_f683a1a522b5ffbf760b81a3",
+            "chunk_id": "chk_4335370e863fa8c8a7919475"
+          }
+        }
+      ]
+    }
+  }
+}

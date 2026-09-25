@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "recorded_at": "2026-09-24",
+  "collection": "kb_chunks_ir_stage2_20260924_v1",
+  "source_ir": "output/stage1-ir-shadow-v4.document.ir.json",
+  "document_id": "doc_f84e9267f84a25223eefdfed",
+  "revision_id": "rev_5b3ca1bb9b2c570000e54c28",
+  "default_index_changed": false,
+  "first_import": {
+    "chunks_written": 129,
+    "unique_chunk_ids": 129,
+    "asset_uris": 83
+  },
+  "repeat_import": {
+    "chunks_written": 129,
+    "unique_chunk_ids": 129,
+    "asset_uris": 83
+  },
+  "conclusion": "The explicitly named Stage 2 collection was rebuilt idempotently without switching or overwriting the default index."
+}

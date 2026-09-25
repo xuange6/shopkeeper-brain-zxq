@@ -135,17 +135,25 @@ class RetrievalTests(unittest.TestCase):
         self.assertEqual([item["chunk_id"] for item in result], ["1", "2"])
         self.assertTrue(all(item["score"] is None for item in result))
 
-    def test_grounding_refuses_empty_or_low_score_context(self) -> None:
+    def test_grounding_requires_calibrated_evidence_decision(self) -> None:
         node = AnswerOutputNode(config=QueryConfig(refusal_min_score=0.3))
 
         self.assertEqual(node._get_refusal_reason({"reranked_docs": []}), "empty_context")
-        reason = node._get_refusal_reason(
-            {"reranked_docs": [{"content": "weak", "score": 0.1}]}
-        )
-        self.assertTrue(reason.startswith("top_score_below_"))
         self.assertEqual(
             node._get_refusal_reason(
-                {"reranked_docs": [{"content": "strong", "score": 0.8}]}
+                {"reranked_docs": [{"content": "weak", "score": 0.1}]}
+            ),
+            "missing_evidence_decision",
+        )
+        self.assertEqual(
+            node._get_refusal_reason(
+                {
+                    "reranked_docs": [{"content": "strong", "score": -4.0}],
+                    "evidence_decision": {
+                        "should_answer": True,
+                        "reason": "sufficient_evidence",
+                    },
+                }
             ),
             "",
         )
@@ -168,6 +176,15 @@ class RetrievalTests(unittest.TestCase):
         self.assertEqual(sources[0]["chunk_id"], "42")
         self.assertEqual(sources[0]["score"], 0.9123)
         self.assertLessEqual(len(sources[0]["preview"]), 281)
+
+    def test_empty_verified_sources_do_not_fall_back_to_rerank_candidates(self) -> None:
+        state = {
+            "sources": [],
+            "reranked_docs": [
+                {"chunk_id": "uncited", "content": "related but not claim-bound"}
+            ],
+        }
+        self.assertEqual(QueryService._select_public_sources(state), [])
 
     def test_history_gracefully_degrades_when_mongodb_is_unavailable(self) -> None:
         service = QueryService()

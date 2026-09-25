@@ -6,11 +6,15 @@ import math
 import json
 import re
 import statistics
+import unicodedata
 from typing import Any, Dict, Iterable, List, Sequence
+
+from knowledge.evaluation.usage import combine_model_usage
+from knowledge.processor.query_process.evidence import evidence_supports_claim
 
 
 _CITATION_PATTERN = re.compile(r"\[(\d+)]")
-EVALUATOR_VERSION = "2.0"
+EVALUATOR_VERSION = "3.2"
 _SCALAR_SOURCE_FIELDS = {
     "source", "chunk_id", "file_title", "title", "parent_title", "url",
     "document_id", "revision_id", "section_id", "source_uri",
@@ -19,6 +23,8 @@ _LIST_SOURCE_FIELDS = {"block_ids", "block_lineage_ids", "page_numbers", "page_u
 _REFUSAL_MARKERS = (
     "没有足够依据",
     "没有检索到足够",
+    "证据不足",
+    "不足以支持",
     "无法回答",
     "无法提供",
     "不能提供",
@@ -151,6 +157,81 @@ def retrieval_metrics(
     }
 
 
+def grouped_retrieval_metrics(
+    sources: Sequence[Dict[str, Any]],
+    expected_sources: Sequence[Dict[str, Any]],
+    *,
+    level: str,
+    k: int = 5,
+    contract: dict | None = None,
+) -> Dict[str, float]:
+    """Score canonical evidence units so chunk splits/merges do not game quality."""
+
+    if not expected_sources:
+        return {f"{level}_empty_retrieval_accuracy": 1.0 if not sources else 0.0}
+    grouped: list[list[Dict[str, Any]]] = []
+    group_positions: dict[str, int] = {}
+    for source in sources:
+        key = _retrieval_group_key(source, level)
+        if key not in group_positions:
+            group_positions[key] = len(grouped)
+            grouped.append([])
+        grouped[group_positions[key]].append(source)
+    grouped = grouped[:k]
+
+    gold = list({json.dumps(item, sort_keys=True): item for item in expected_sources}.values())
+    relevant_ranks: list[int] = []
+    matched_gold: set[int] = set()
+    credited_ranks: list[int] = []
+    for rank, members in enumerate(grouped):
+        matched_here = {
+            gold_index
+            for gold_index, expected in enumerate(gold)
+            if any(_matches_with_aliases(member, expected, contract) for member in members)
+        }
+        if matched_here:
+            relevant_ranks.append(rank)
+        new_matches = matched_here - matched_gold
+        if new_matches:
+            credited_ranks.append(rank)
+            matched_gold.update(new_matches)
+
+    recall = len(matched_gold) / len(gold)
+    precision = len(relevant_ranks) / len(grouped) if grouped else 0.0
+    mrr = 1.0 / (min(relevant_ranks) + 1) if relevant_ranks else 0.0
+    dcg = sum(1.0 / math.log2(rank + 2) for rank in credited_ranks)
+    ideal_dcg = sum(
+        1.0 / math.log2(index + 2)
+        for index in range(min(len(gold), k))
+    )
+    return {
+        f"{level}_recall@{k}": round(recall, 6),
+        f"{level}_precision@{k}": round(precision, 6),
+        f"{level}_mrr": round(mrr, 6),
+        f"{level}_ndcg@{k}": round(dcg / ideal_dcg if ideal_dcg else 0.0, 6),
+    }
+
+
+def _retrieval_group_key(source: Dict[str, Any], level: str) -> str:
+    if source.get("source") == "web" or source.get("url"):
+        return f"web:{source.get('url') or source.get('domain') or source.get('title')}"
+    document = str(source.get("document_id") or source.get("file_title") or "unknown")
+    if level == "document":
+        return f"document:{document}"
+    section = str(
+        source.get("section_id") or source.get("parent_title") or source.get("title") or "unknown"
+    )
+    if level == "section":
+        return f"section:{document}:{canonical_heading(section)}"
+    explicit = str(source.get("evidence_group_id") or "")
+    if explicit:
+        return explicit
+    lineage = source.get("block_lineage_ids") or source.get("block_ids") or []
+    if isinstance(lineage, list) and lineage:
+        return f"evidence:{document}:{section}:{'|'.join(sorted(map(str, lineage)))}"
+    return f"evidence:{document}:{canonical_heading(section)}"
+
+
 def classify_behavior(answer: str) -> str:
     normalized = str(answer or "")
     if any(marker in normalized for marker in _REFUSAL_MARKERS):
@@ -162,7 +243,27 @@ def classify_behavior(answer: str) -> str:
 
 def _fact_present(answer: str, fact: Dict[str, Any]) -> bool:
     alternatives = [str(value) for value in fact.get("any", []) if str(value)]
-    return bool(alternatives) and any(value in answer for value in alternatives)
+    normalized_answer = _normalize_fact_text(answer)
+    return bool(alternatives) and any(
+        _normalize_fact_text(value) in normalized_answer for value in alternatives
+    )
+
+
+def _normalize_fact_text(value: Any) -> str:
+    """Normalize presentation-only differences before deterministic scoring.
+
+    NFKC makes `m²`, `m2`, and the CJK compatibility glyph `㎡`
+    comparable. Whitespace is ignored because model formatting around units is
+    not a semantic answer difference.
+    """
+
+    normalized = unicodedata.normalize("NFKC", str(value or "")).casefold()
+    # Deterministic, meaning-preserving Chinese modal normalization. This is
+    # intentionally narrow: it recognizes a grammatical equivalent, not a
+    # fuzzy topical match, so a fluent answer is not penalized for saying
+    # “无需安装” where the reviewed fact says “不需要安装”.
+    normalized = normalized.replace("无需", "不需要")
+    return re.sub(r"\s+", "", normalized)
 
 
 def _fact_is_cited(
@@ -180,22 +281,27 @@ def _fact_is_cited(
     # Attach such markers to the preceding clause before sentence splitting.
     normalized_answer = re.sub(r"[。！？]\s*(?=\[\d+])", "", answer)
     for sentence in re.split(r"[。！？\n]", normalized_answer):
-        if not any(value in sentence for value in alternatives):
+        normalized_sentence = _normalize_fact_text(sentence)
+        if not any(
+            _normalize_fact_text(value) in normalized_sentence for value in alternatives
+        ):
             continue
         citations = [int(value) for value in _CITATION_PATTERN.findall(sentence)]
         for citation in citations:
             if not 1 <= citation <= len(sources):
                 continue
             source = sources[citation - 1]
-            if expected_sources and not any(
+            matches_reviewed_source = not expected_sources or any(
                 _matches_with_aliases(source, expected, contract) for expected in expected_sources
-            ):
+            )
+            grounded_in_preview = evidence_supports_claim(sentence, source, 0.08)
+            if not matches_reviewed_source and not grounded_in_preview:
                 continue
             source_titles = {
                 canonical_heading(source.get("title")),
                 canonical_heading(source.get("parent_title")),
             }
-            if not supporting_titles or source_titles & supporting_titles:
+            if grounded_in_preview or not supporting_titles or source_titles & supporting_titles:
                 return True
             if any(
                 canonical_heading(alias.get("expected_title")) in supporting_titles
@@ -225,8 +331,17 @@ def answer_metrics(case: Dict[str, Any], response: Dict[str, Any], contract: dic
     valid_citations = [value for value in citations if 1 <= value <= len(sources)]
     if expected.get("requires_citation"):
         relevant = _relevant_indices(sources, expected.get("relevant_sources") or [], contract)
-        correct = [value for value in valid_citations if value - 1 in relevant]
-        citation_correctness = len(correct) / len(citations) if citations else 0.0
+        correct_count = 0
+        normalized_answer = re.sub(r"[。！？]\s*(?=\[\d+])", "", answer)
+        for sentence in re.split(r"[。！？\n]", normalized_answer):
+            for value in (int(item) for item in _CITATION_PATTERN.findall(sentence)):
+                if not 1 <= value <= len(sources):
+                    continue
+                if value - 1 in relevant or evidence_supports_claim(
+                    sentence, sources[value - 1], 0.08
+                ):
+                    correct_count += 1
+        citation_correctness = correct_count / len(citations) if citations else 0.0
     else:
         citation_correctness = 1.0 if len(valid_citations) == len(citations) else 0.0
 
@@ -291,6 +406,16 @@ def evaluate_case(case: Dict[str, Any], raw_result: Dict[str, Any], contract: di
     if scope == "full_pipeline" and isinstance(stages, dict):
         final_candidates = stages.get("rerank") or []
         metrics.update(retrieval_metrics(final_candidates, expected_sources, k=k, contract=contract))
+        for level in ("evidence_group", "section", "document"):
+            metrics.update(
+                grouped_retrieval_metrics(
+                    final_candidates,
+                    expected_sources,
+                    level=level,
+                    k=k,
+                    contract=contract,
+                )
+            )
         if expected_sources:
             for stage in ("direct", "hyde", "knowledge_graph", "web", "rrf", "rerank"):
                 stage_metrics = retrieval_metrics(
@@ -370,7 +495,26 @@ def _pipeline_complete(
         return 0.0
 
     statuses = trace.get("status") or {}
-    required = {"search_embedding", "search_embedding_hyde", "query_kg", "rrf", "rerank_node"}
+    plan = trace.get("plan") or {}
+    channels = plan.get("channels") if isinstance(plan, dict) else {}
+    required = {"rrf", "rerank_node"}
+    mapping = {
+        "direct": "search_embedding",
+        "hyde": "search_embedding_hyde",
+        "kg": "query_kg",
+    }
+    if isinstance(channels, dict):
+        required.update(
+            node_name
+            for channel, node_name in mapping.items()
+            if isinstance(channels.get(channel), dict) and channels[channel].get("enabled")
+        )
+        web = channels.get("web") or {}
+        if isinstance(web, dict) and web.get("mode") == "required":
+            required.add("web_search_mcp")
+    else:
+        # Compatibility for stage-1 traces without a versioned plan.
+        required.update(mapping.values())
     if any(
         not isinstance(statuses.get(stage), dict)
         or statuses[stage].get("status") not in {"ok"}
@@ -421,19 +565,7 @@ def aggregate_results(results: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
             "p50": round(percentile(latencies, 0.50), 3),
             "p95": round(percentile(latencies, 0.95), 3),
         },
-        "model_usage": {
-            "call_count": sum(int(item.get("call_count") or 0) for item in model_usages),
-            "failed_call_count": sum(
-                int(item.get("failed_call_count") or 0) for item in model_usages
-            ),
-            "input_tokens": sum(int(item.get("input_tokens") or 0) for item in model_usages),
-            "output_tokens": sum(int(item.get("output_tokens") or 0) for item in model_usages),
-            "total_tokens": sum(int(item.get("total_tokens") or 0) for item in model_usages),
-            "estimated_cost_usd": round(
-                sum(float(item.get("estimated_cost_usd") or 0.0) for item in model_usages),
-                8,
-            ),
-        },
+        "model_usage": combine_model_usage(model_usages),
         "failed_case_ids": [
             result["case_id"] for result in results if not result.get("passed")
         ],

@@ -12,6 +12,12 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from knowledge.processor.import_process.nodes.kg_graph_node import MAX_ENTITY_NAME_LENGTH
 from knowledge.processor.query_process.base import BaseNode, setup_logging
 from knowledge.processor.query_process.state import QueryGraphState
+from knowledge.security.access_control import (
+    AccessContext,
+    build_milvus_access_filter,
+    build_milvus_item_filter,
+    combine_milvus_filters,
+)
 
 
 ALLOWED_ENTITY_LABELS_CN = (
@@ -23,6 +29,35 @@ ENTITY_ALIGN_TOP_K = 3
 SEED_NODE_WEIGHT = 2.0
 NEIGHBOR_NODE_WEIGHT = 1.0
 
+# KG returns chunk ids from Neo4j, then hydrates the original Milvus evidence.
+# Keep the same lineage surface as direct/HyDE retrieval so a KG hit never
+# becomes an untraceable citation merely because it travelled through the graph.
+KG_CHUNK_OUTPUT_FIELDS = [
+    "chunk_id",
+    "stable_id",
+    "document_id",
+    "revision_id",
+    "content",
+    "title",
+    "parent_title",
+    "title_path",
+    "file_title",
+    "part",
+    "item_name",
+    "source_uri",
+    "section_id",
+    "block_ids",
+    "page_numbers",
+    "page_uids",
+    "block_lineage_ids",
+    "citation",
+    "parser_name",
+    "parser_version",
+    "ir_schema_version",
+    "has_table",
+    "has_image",
+]
+
 EntityItemPair = Dict[str, Any]
 EntityNode = Dict[str, Any]
 Neo4jTriple = Dict[str, Any]
@@ -30,6 +65,11 @@ Neo4jTriple = Dict[str, Any]
 _CYPHER_EXACT_SEEDS = """
 MATCH (n:Entity)
 WHERE n.item_name = $item_name AND n.name = $entity_name
+  AND n.tenant_id = $tenant_id AND n.graph_version = $graph_version
+  AND (n.visibility = 'public'
+       OR ($authenticated AND n.visibility = 'tenant')
+       OR (n.visibility = 'private' AND
+           any(token IN coalesce(n.acl_readers, []) WHERE token IN $access_tokens)))
 RETURN n.item_name AS item_name, n.name AS name
 """
 
@@ -37,6 +77,11 @@ _CYPHER_FUZZY_SEEDS = """
 MATCH (n:Entity)
 WHERE toLower(n.name) CONTAINS toLower($entity_name)
   AND n.item_name = $item_name
+  AND n.tenant_id = $tenant_id AND n.graph_version = $graph_version
+  AND (n.visibility = 'public'
+       OR ($authenticated AND n.visibility = 'tenant')
+       OR (n.visibility = 'private' AND
+           any(token IN coalesce(n.acl_readers, []) WHERE token IN $access_tokens)))
 RETURN n.item_name AS item_name, n.name AS name
 LIMIT $limit
 """
@@ -44,6 +89,16 @@ LIMIT $limit
 _CYPHER_ONE_HOP_RELATIONS = """
 MATCH (seed:Entity {name: $entity_name, item_name: $item_name})-[r]-(nbr:Entity)
 WHERE type(r) <> 'MENTIONED_IN' AND nbr.item_name = $item_name
+  AND seed.tenant_id = $tenant_id AND seed.graph_version = $graph_version
+  AND nbr.tenant_id = $tenant_id AND nbr.graph_version = $graph_version
+  AND (seed.visibility = 'public'
+       OR ($authenticated AND seed.visibility = 'tenant')
+       OR (seed.visibility = 'private' AND
+           any(token IN coalesce(seed.acl_readers, []) WHERE token IN $access_tokens)))
+  AND (nbr.visibility = 'public'
+       OR ($authenticated AND nbr.visibility = 'tenant')
+       OR (nbr.visibility = 'private' AND
+           any(token IN coalesce(nbr.acl_readers, []) WHERE token IN $access_tokens)))
 RETURN
   CASE WHEN startNode(r) = seed THEN seed.name ELSE nbr.name END AS head,
   type(r) AS rel,
@@ -55,6 +110,16 @@ _CYPHER_LOOKUP_CHUNK = """
 UNWIND $nodes_with_weight AS n
 MATCH (e:Entity {name: n.entity_name, item_name: n.item_name})
       -[:MENTIONED_IN]->(c:Chunk {item_name: n.item_name})
+WHERE e.tenant_id = $tenant_id AND e.graph_version = $graph_version
+  AND c.tenant_id = $tenant_id AND c.graph_version = $graph_version
+  AND (e.visibility = 'public'
+       OR ($authenticated AND e.visibility = 'tenant')
+       OR (e.visibility = 'private' AND
+           any(token IN coalesce(e.acl_readers, []) WHERE token IN $access_tokens)))
+  AND (c.visibility = 'public'
+       OR ($authenticated AND c.visibility = 'tenant')
+       OR (c.visibility = 'private' AND
+           any(token IN coalesce(c.acl_readers, []) WHERE token IN $access_tokens)))
 WITH c, sum(n.weight) AS score, count(e) AS cnt
 RETURN c.id AS chunk_id, c.item_name AS item_name, score, cnt
 ORDER BY score DESC, cnt DESC, chunk_id ASC
@@ -93,7 +158,7 @@ class _EntityExtractor:
         try:
             from knowledge.utils.llm_utils import get_llm_client
 
-            llm = get_llm_client(json_mode=True, trace_id=trace_id)
+            llm = get_llm_client(json_mode=True, trace_id=trace_id, operation="kg_entity")
             response = llm.invoke(
                 [
                     SystemMessage(content=_ENTITY_EXTRACT_SYSTEM_PROMPT),
@@ -116,7 +181,13 @@ class _EntityAligner:
         self._min_score = min_score
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def align(self, entities: List[str], item_names: Optional[List[str]]) -> Dict[str, Any]:
+    def align(
+        self,
+        entities: List[str],
+        item_names: Optional[List[str]],
+        access_context: AccessContext | Dict[str, Any] | None = None,
+        graph_version: str = "legacy",
+    ) -> Dict[str, Any]:
         """
         Returns:
             {
@@ -147,7 +218,11 @@ class _EntityAligner:
             return self._fallback(entities, item_names, reason="embedding_failed")
 
         # 用商品名限制实体对齐范围，避免跨商品匹配到同名或近义实体。
-        filter_expr = _build_item_filter_expr(item_names)
+        filter_expr = combine_milvus_filters(
+            build_milvus_item_filter(item_names),
+            build_milvus_access_filter(access_context),
+            f"graph_version == {json.dumps(graph_version)}",
+        )
         alignments: List[Dict[str, Any]] = []
         aligned_entities: List[str] = []
         seen_aligned_keys: Set[Tuple[str, str]] = set()
@@ -217,7 +292,15 @@ class _EntityAligner:
                 ranker_weights=(0.5, 0.5),
                 normalize_score=True,
                 top_k=search_top_k,
-                output_fields=["entity_name", "source_chunk_id", "item_name", "context"],
+                output_fields=[
+                    "entity_name",
+                    "source_chunk_id",
+                    "item_name",
+                    "context",
+                    "tenant_id",
+                    "visibility",
+                    "graph_version",
+                ],
             )
         except Exception as exc:
             self._logger.error("实体对齐失败: %s entity=%s", exc, entity, exc_info=True)
@@ -340,6 +423,8 @@ class _Neo4jGraphReader:
         max_triples_per_seed: int,
         max_total_triples: int,
         max_total_chunks: int,
+        access_context: AccessContext | Dict[str, Any] | None = None,
+        graph_version: str = "legacy",
     ):
         self._database = database
         self._max_seed_per_node = max_seed_per_node
@@ -347,6 +432,8 @@ class _Neo4jGraphReader:
         self._max_triples_per_seed = max_triples_per_seed
         self._max_total_triples = max_total_triples
         self._max_total_chunks = max_total_chunks
+        self._access_context = AccessContext.from_state(access_context)
+        self._graph_version = graph_version
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _session(self):
@@ -400,6 +487,10 @@ class _Neo4jGraphReader:
                 _CYPHER_EXACT_SEEDS,
                 item_name=item_name,
                 entity_name=entity_name,
+                tenant_id=self._access_context.tenant_id,
+                graph_version=self._graph_version,
+                authenticated=self._access_context.authenticated,
+                access_tokens=list(self._access_context.reader_tokens()),
             ).data()
         )
         exact_nodes = _clean_seed_rows(exact_rows)
@@ -412,6 +503,10 @@ class _Neo4jGraphReader:
                 item_name=item_name,
                 entity_name=entity_name,
                 limit=self._max_seed_per_node,
+                tenant_id=self._access_context.tenant_id,
+                graph_version=self._graph_version,
+                authenticated=self._access_context.authenticated,
+                access_tokens=list(self._access_context.reader_tokens()),
             ).data()
         )
         return _clean_seed_rows(fuzzy_rows)
@@ -437,6 +532,8 @@ class _Neo4jGraphReader:
                         item_name,
                         entity_name,
                         self._max_triples_per_seed,
+                        self._access_context,
+                        self._graph_version,
                     )
                     for triple in seed_triples:
                         key = (
@@ -464,12 +561,19 @@ class _Neo4jGraphReader:
         item_name: str,
         entity_name: str,
         limit: int,
+        access_context: AccessContext | Dict[str, Any] | None = None,
+        graph_version: str = "legacy",
     ) -> List[Neo4jTriple]:
+        principal = AccessContext.from_state(access_context)
         rows = tx.run(
             _CYPHER_ONE_HOP_RELATIONS,
             item_name=item_name,
             entity_name=entity_name,
             limit=limit,
+            tenant_id=principal.tenant_id,
+            graph_version=graph_version,
+            authenticated=principal.authenticated,
+            access_tokens=list(principal.reader_tokens()),
         ).data()
 
         triples: List[Neo4jTriple] = []
@@ -506,6 +610,10 @@ class _Neo4jGraphReader:
                         _CYPHER_LOOKUP_CHUNK,
                         nodes_with_weight=nodes_with_weight,
                         limit=self._max_total_chunks,
+                        tenant_id=self._access_context.tenant_id,
+                        graph_version=self._graph_version,
+                        authenticated=self._access_context.authenticated,
+                        access_tokens=list(self._access_context.reader_tokens()),
                     ).data()
                 )
         except Exception as exc:
@@ -536,8 +644,13 @@ class _Neo4jGraphReader:
 class _ChunkBackfiller:
     """Backfill chunk content from CHUNKS_COLLECTION by chunk_id."""
 
-    def __init__(self, collection_name: str):
+    def __init__(
+        self,
+        collection_name: str,
+        access_context: AccessContext | Dict[str, Any] | None = None,
+    ):
         self._collection_name = collection_name
+        self._access_context = AccessContext.from_state(access_context)
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def backfill(self, chunk_hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -552,20 +665,23 @@ class _ChunkBackfiller:
             return []
 
         try:
-            from knowledge.utils.milvus_utils import get_milvus_client
+            from knowledge.utils.milvus_utils import (
+                get_milvus_client,
+                supported_output_fields,
+            )
 
-            chunk_rows = get_milvus_client().query(
+            client = get_milvus_client()
+            chunk_rows = client.query(
                 collection_name=self._collection_name,
-                filter=_build_chunk_id_filter_expr(chunk_ids),
-                output_fields=[
-                    "chunk_id",
-                    "content",
-                    "title",
-                    "parent_title",
-                    "file_title",
-                    "part",
-                    "item_name",
-                ],
+                filter=combine_milvus_filters(
+                    _build_chunk_id_filter_expr(chunk_ids),
+                    build_milvus_access_filter(self._access_context),
+                ),
+                output_fields=supported_output_fields(
+                    client,
+                    self._collection_name,
+                    KG_CHUNK_OUTPUT_FIELDS,
+                ),
             )
         except Exception as exc:
             self._logger.error("Milvus chunk 回填异常: %s", exc, exc_info=True)
@@ -585,12 +701,15 @@ class _ChunkBackfiller:
             if not chunk_id or chunk_id in seen_chunk_ids:
                 continue
 
-            chunk = chunk_map.get(chunk_id)
-            if not chunk:
+            raw_chunk = chunk_map.get(chunk_id)
+            if not raw_chunk:
                 self._logger.debug("chunk_id=%s 未找到，跳过", chunk_id)
                 continue
 
             seen_chunk_ids.add(chunk_id)
+            chunk = dict(raw_chunk)
+            chunk.setdefault("source", "local")
+            chunk.setdefault("source_type", "knowledge_graph")
             chunks.append({"entity": chunk, "distance": hit.get("distance", 0.0)})
 
         self._logger.info("chunk 回填完成: %d / %d", len(chunks), len(chunk_hits))
@@ -626,7 +745,16 @@ class QueryKgNode(BaseNode):
     name = "query_kg"
 
     def process(self, state: QueryGraphState) -> QueryGraphState:
+        from knowledge.processor.query_process.nodes.retrieval_plan import channel_enabled
+
+        if not channel_enabled(state, "kg"):
+            result = self._empty_result()
+            result["retrieval_status"] = {
+                self.name: {"status": "skipped", "reason": "disabled by retrieval plan"}
+            }
+            return result
         question, item_names = self._parse_input(state)
+        access_context = AccessContext.from_state(state.get("access_context"))
         if not question:
             return self._empty_result()
 
@@ -640,7 +768,12 @@ class QueryKgNode(BaseNode):
         align_result = _EntityAligner(
             collection_name=self.config.entity_name_collection,
             min_score=self.config.kg_entity_align_min_score,
-        ).align(entities, item_names)
+        ).align(
+            entities,
+            item_names,
+            access_context,
+            self.config.kg_graph_version,
+        )
 
         aligned_entities = align_result.get("aligned_entities") or entities
         alignments = align_result.get("alignments") or []
@@ -662,6 +795,8 @@ class QueryKgNode(BaseNode):
             max_total_triples=self.config.kg_max_total_triples,
             # 通过 Entity -[:MENTIONED_IN]-> Chunk 反查时最多返回多少个 chunk 候选。
             max_total_chunks=self.config.kg_max_total_chunks,
+            access_context=access_context,
+            graph_version=self.config.kg_graph_version,
         )
         seed_nodes = graph_reader.find_seed_nodes(entity_item_pairs)
 
@@ -672,7 +807,10 @@ class QueryKgNode(BaseNode):
         chunk_hits = graph_reader.find_nodes_chunk_id(seed_nodes, one_hop_triples)
 
         self.log_step("step_7", "回填 chunk 文本")
-        kg_chunks = _ChunkBackfiller(self.config.chunks_collection).backfill(chunk_hits)
+        kg_chunks = _ChunkBackfiller(
+            self.config.chunks_collection,
+            access_context,
+        ).backfill(chunk_hits)
         triples_docs = _one_hop_triples_to_texts(one_hop_triples)
 
         # step_8 只做流程汇总日志，方便观察本次 KG 检索链路是否正常；
