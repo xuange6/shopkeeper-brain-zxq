@@ -37,6 +37,9 @@ jobs:
             "httpx>=0.27,<1" \
             "pymilvus[model]>=2.5,<4" \
             "minio>=7.2,<8" \
+            "neo4j>=5.20,<7" \
+            "pymongo>=4.8,<5" \
+            "langgraph>=1.0,<2" \
             "langchain-core>=1.0,<2" \
             "langchain-openai>=1.0,<2"
 
