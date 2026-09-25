@@ -12,9 +12,11 @@ from typing import Any
 
 _EXPORTS = {
     "AnswerOutputNode": ".answer_output",
+    "IntentPolicyNode": ".intent_policy",
     "ItemNameConfirmNode": ".item_name_confirm",
     "QueryKgNode": ".query_kg",
     "RerankNode": ".rerank",
+    "RetrievalPlanNode": ".retrieval_plan",
     "RrfNode": ".rrf",
     "SearchEmbeddingNode": ".search_embedding",
     "SearchEmbeddingHydeNode": ".search_embedding_hyde",

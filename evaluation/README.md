@@ -88,6 +88,10 @@ python scripts/promote_evaluation_baseline.py `
 
 ## 基线更新纪律
 
+当前阶段 0 baseline 的数据集 SHA 与仓库中的数据集文件不一致；请先运行
+`python scripts/audit_stage0_baseline.py` 查看本地审计结果。详细内部报告不随公开
+代码提交发布。不要通过直接改旧 baseline 的 SHA 绕过门禁。
+
 1. 固定 dataset SHA-256，不在调参时顺手改答案；数据修改必须升版本。
 2. 完整运行记录 `git_commit`、Prompt SHA-256、模型、集合名、`INDEX_VERSION` 与查询参数。
 3. 先审查逐样例退化，再决定是否替换 snapshot/baseline。

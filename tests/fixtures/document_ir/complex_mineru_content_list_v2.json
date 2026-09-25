@@ -1,0 +1,101 @@
+[
+  [
+    {
+      "type": "title",
+      "content": {"title_content": [{"type": "text", "content": "工业设备手册"}], "level": 1},
+      "bbox": [60, 50, 500, 100]
+    },
+    {
+      "type": "paragraph",
+      "content": {"paragraph_content": [{"type": "text", "content": "左栏第一段。"}]},
+      "bbox": [50, 140, 450, 230]
+    },
+    {
+      "type": "paragraph",
+      "content": {"paragraph_content": [{"type": "text", "content": "右栏第二段。"}]},
+      "bbox": [550, 140, 950, 230]
+    },
+    {
+      "type": "image",
+      "sub_type": "text_image",
+      "content": {
+        "image_source": {"path": "images/control-panel.png"},
+        "content": "启动 停止 急停",
+        "image_caption": [{"type": "text", "content": "图 1 控制面板"}],
+        "image_footnote": []
+      },
+      "bbox": [100, 300, 900, 650]
+    },
+    {
+      "type": "page_footer",
+      "content": {"page_footer_content": [{"type": "text", "content": "合成测试资料"}]},
+      "bbox": [400, 950, 600, 980]
+    }
+  ],
+  [
+    {
+      "type": "title",
+      "content": {"title_content": [{"type": "text", "content": "介质规格"}], "level": 2},
+      "bbox": [60, 60, 400, 100]
+    },
+    {
+      "type": "table",
+      "content": {
+        "image_source": {"path": "images/table-1.png"},
+        "table_caption": [{"type": "text", "content": "表 1 介质参数"}],
+        "table_footnote": [],
+        "html": "<table><tr><th>介质</th><th>重量</th></tr><tr><td>纸张</td><td>80 g/m²</td></tr></table>",
+        "table_type": "simple_table",
+        "table_nest_level": 1
+      },
+      "bbox": [80, 150, 920, 850]
+    },
+    {
+      "type": "paragraph",
+      "content": {"paragraph_content": [{"type": "text", "content": "表格续见下页。"}]},
+      "bbox": [80, 880, 500, 920]
+    }
+  ],
+  [
+    {
+      "type": "table",
+      "content": {
+        "image_source": {"path": "images/table-2.png"},
+        "table_caption": [],
+        "table_footnote": [{"type": "text", "content": "* 环境湿度 50%"}],
+        "html": "<table><tr><th>介质</th><th>重量</th></tr><tr><td>卡纸</td><td>220 g/m²</td></tr></table>",
+        "table_type": "simple_table",
+        "table_nest_level": 1
+      },
+      "bbox": [80, 60, 920, 500]
+    },
+    {
+      "type": "paragraph",
+      "content": {"paragraph_content": [{"type": "text", "content": "1 这是跨页表格脚注。"}]},
+      "bbox": [80, 520, 650, 560]
+    },
+    {
+      "type": "page_number",
+      "content": {"page_number_content": [{"type": "text", "content": "3"}]},
+      "bbox": [480, 960, 520, 985]
+    }
+  ],
+  [
+    {
+      "type": "title",
+      "content": {"title_content": [{"type": "text", "content": "扫描页"}], "level": 2},
+      "bbox": [80, 80, 300, 120]
+    },
+    {
+      "type": "image",
+      "sub_type": "text_image",
+      "content": {
+        "image_source": {"path": "images/scanned-warning.png"},
+        "content": "OCR：高温危险，请佩戴防护手套。",
+        "image_caption": [],
+        "image_footnote": []
+      },
+      "bbox": [50, 150, 950, 900]
+    }
+  ]
+]

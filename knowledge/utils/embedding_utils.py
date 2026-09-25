@@ -19,6 +19,7 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
 
 
 _model_lock = Lock()
+_encode_lock = Lock()
 _bge_m3_model = None
 
 
@@ -33,11 +34,6 @@ def _env_bool(name: str, default: bool = False) -> bool:
 def _resolve_bge_m3_model_name() -> str:
     """
     解析 BGE-M3 模型位置。
-
-    ModelScope 的缓存目录可能是：
-    - D:/ai_models/modelscope_cache/BAAI/bge-m3
-    也可能被用户写成：
-    - D:/ai_models/modelscope_cache/models/BAAI/bge-m3
 
     如果 BGE_M3_PATH 不存在，就尝试根据 MODELSCOPE_CACHE 和 BGE_M3 拼出真实路径。
     """
@@ -106,8 +102,13 @@ def generate_hybrid_embeddings(texts: List[str]) -> Dict[str, list]:
     if not texts:
         return {"dense": [], "sparse": []}
 
-    model = get_bge_m3_model()
-    raw_embeddings = model.encode_queries(texts)
+    # Direct, HyDE, and KG retrieval run in parallel and share one BGE-M3
+    # instance. Concurrent encode_queries calls reached Torch device transfers
+    # from separate threads and caused a Windows native access violation during
+    # the stage-1 service evaluation. Keep the model shared but serialize use.
+    with _encode_lock:
+        model = get_bge_m3_model()
+        raw_embeddings = model.encode_queries(texts)
 
     dense_vectors = [emb.tolist() for emb in raw_embeddings["dense"]]
     sparse_vectors = _extract_sparse_vectors(raw_embeddings, len(texts))

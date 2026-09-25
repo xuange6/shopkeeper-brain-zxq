@@ -6,22 +6,24 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from pymilvus import DataType
 
 from knowledge.processor.import_process.base import BaseNode, setup_logging
-from knowledge.processor.import_process.exceptions import MilvusError, Neo4jError
+from knowledge.processor.import_process.exceptions import LLMError, MilvusError, Neo4jError
 from knowledge.processor.import_process.prompts.knowledge_graph_prompt import KNOWLEDGE_GRAPH_SYSTEM_PROMPT
 from knowledge.processor.import_process.state import ImportGraphState
 from knowledge.utils.embedding_utils import get_bge_m3_model
 from knowledge.utils.llm_utils import get_llm_client
 from knowledge.utils.milvus_utils import get_milvus_client
 from knowledge.utils.neo4j_util import get_neo4j_driver
+from knowledge.security.access_control import normalize_access_metadata
 
 
 MAX_ENTITY_NAME_LENGTH = 20
@@ -40,16 +42,29 @@ ALLOWED_RELATION_TYPES: Set[str] = {
 }
 
 CYPHER_CLEAR_ITEM = """
-    MATCH (n {item_name: $item_name})
+    MATCH (n {item_name: $item_name, tenant_id: $tenant_id, graph_version: $graph_version})
     DETACH DELETE n
 """
 
+CYPHER_ENTITY_SCOPE_CONSTRAINT = """
+CREATE CONSTRAINT shopkeeper_entity_scope IF NOT EXISTS
+FOR (n:Entity)
+REQUIRE (n.name, n.item_name, n.tenant_id, n.graph_version) IS UNIQUE
+"""
+
+CYPHER_CHUNK_SCOPE_CONSTRAINT = """
+CREATE CONSTRAINT shopkeeper_chunk_scope IF NOT EXISTS
+FOR (n:Chunk)
+REQUIRE (n.id, n.item_name, n.tenant_id, n.graph_version) IS UNIQUE
+"""
+
 CYPHER_MERGE_CHUNK = """
-    MERGE (c:Chunk {id: $chunk_id, item_name: $item_name})
+    MERGE (c:Chunk {id: $chunk_id, item_name: $item_name, tenant_id: $tenant_id, graph_version: $graph_version})
+    SET c.visibility = $visibility, c.acl_readers = $acl_readers
 """
 
 CYPHER_MERGE_ENTITY_TEMPLATE = """
-    MERGE (n:Entity {{name: $name, item_name: $item_name}})
+    MERGE (n:Entity {{name: $name, item_name: $item_name, tenant_id: $tenant_id, graph_version: $graph_version}})
     ON CREATE SET
         n.source_chunk_id = $chunk_id,
         n.description = $description
@@ -58,18 +73,18 @@ CYPHER_MERGE_ENTITY_TEMPLATE = """
             WHEN $description <> "" THEN $description
             ELSE coalesce(n.description, "")
         END
-    SET n:`{label}`
+    SET n:`{label}`, n.visibility = $visibility, n.acl_readers = $acl_readers
 """
 
 CYPHER_LINK_ENTITY_TO_CHUNK = """
-    MATCH (n:Entity {name: $name, item_name: $item_name})
-    MATCH (c:Chunk {id: $chunk_id, item_name: $item_name})
+    MATCH (n:Entity {name: $name, item_name: $item_name, tenant_id: $tenant_id, graph_version: $graph_version})
+    MATCH (c:Chunk {id: $chunk_id, item_name: $item_name, tenant_id: $tenant_id, graph_version: $graph_version})
     MERGE (n)-[:MENTIONED_IN]->(c)
 """
 
 CYPHER_MERGE_RELATION_TEMPLATE = """
-    MATCH (h:Entity {{name: $head, item_name: $item_name}})
-    MATCH (t:Entity {{name: $tail, item_name: $item_name}})
+    MATCH (h:Entity {{name: $head, item_name: $item_name, tenant_id: $tenant_id, graph_version: $graph_version}})
+    MATCH (t:Entity {{name: $tail, item_name: $item_name, tenant_id: $tenant_id, graph_version: $graph_version}})
     MERGE (h)-[:{rel_type}]->(t)
 """
 
@@ -81,6 +96,7 @@ class ProcessingStats:
     total_chunks: int = 0
     processed_chunks: int = 0
     failed_chunks: int = 0
+    empty_chunks: int = 0
     total_entities: int = 0
     total_relations: int = 0
     errors: List[str] = field(default_factory=list)
@@ -89,6 +105,7 @@ class ProcessingStats:
         return (
             f"处理完成: {self.processed_chunks}/{self.total_chunks} 切片成功, "
             f"{self.failed_chunks} 失败, "
+            f"{self.empty_chunks} 无实体, "
             f"共 {self.total_entities} 实体 / {self.total_relations} 关系"
         )
 
@@ -105,7 +122,7 @@ class Neo4jGraphWriter:
             return driver.session(database=self.database)
         return driver.session()
 
-    def clear(self, driver, item_name: str) -> None:
+    def clear(self, driver, item_name: str, tenant_id: str, graph_version: str) -> None:
         if not driver:
             raise Neo4jError("Neo4j driver is not available")
         if not item_name:
@@ -113,9 +130,18 @@ class Neo4jGraphWriter:
 
         try:
             with self._session(driver) as session:
+                session.run(CYPHER_ENTITY_SCOPE_CONSTRAINT).consume()
+                session.run(CYPHER_CHUNK_SCOPE_CONSTRAINT).consume()
                 session.execute_write(
-                    lambda tx, name: tx.run(CYPHER_CLEAR_ITEM, item_name=name),
+                    lambda tx, name, tenant, version: tx.run(
+                        CYPHER_CLEAR_ITEM,
+                        item_name=name,
+                        tenant_id=tenant,
+                        graph_version=version,
+                    ),
                     item_name,
+                    tenant_id,
+                    graph_version,
                 )
             self.logger.info("Neo4j old data cleared: item_name=%s", item_name)
         except Exception as exc:
@@ -128,6 +154,8 @@ class Neo4jGraphWriter:
             relations: List[Dict[str, Any]],
             chunk_id: str,
             item_name: str,
+            access: Dict[str, Any],
+            graph_version: str,
     ) -> None:
         if not entities:
             return
@@ -142,6 +170,8 @@ class Neo4jGraphWriter:
                     relations,
                     chunk_id,
                     item_name,
+                    access,
+                    graph_version,
                 )
             self.logger.debug(
                 "Neo4j wrote %d entities and %d relations for chunk %s",
@@ -159,10 +189,20 @@ class Neo4jGraphWriter:
             relations: List[Dict[str, Any]],
             chunk_id: str,
             item_name: str,
+            access: Dict[str, Any],
+            graph_version: str,
     ) -> None:
         # This transaction writes graph data for the current chunk only.
         # 1. Create or reuse the current Chunk node.
-        tx.run(CYPHER_MERGE_CHUNK, chunk_id=chunk_id, item_name=item_name)
+        common = {
+            "chunk_id": chunk_id,
+            "item_name": item_name,
+            "tenant_id": access["tenant_id"],
+            "graph_version": graph_version,
+            "visibility": access["visibility"],
+            "acl_readers": access["acl_readers"],
+        }
+        tx.run(CYPHER_MERGE_CHUNK, **common)
 
         for entity in entities:
             name = str(entity.get("name", "")).strip()
@@ -181,6 +221,10 @@ class Neo4jGraphWriter:
                 description=description,
                 chunk_id=chunk_id,
                 item_name=item_name,
+                tenant_id=access["tenant_id"],
+                graph_version=graph_version,
+                visibility=access["visibility"],
+                acl_readers=access["acl_readers"],
             )
             # 3. Link the Entity to the current Chunk.
             tx.run(
@@ -188,6 +232,8 @@ class Neo4jGraphWriter:
                 name=name,
                 chunk_id=chunk_id,
                 item_name=item_name,
+                tenant_id=access["tenant_id"],
+                graph_version=graph_version,
             )
 
         # 4. Create business relations between Entity nodes.
@@ -203,7 +249,14 @@ class Neo4jGraphWriter:
             # Relationship types are also Cypher syntax, not parameters.
             # Whitelist rel_type before formatting it into the query.
             cypher = CYPHER_MERGE_RELATION_TEMPLATE.format(rel_type=rel_type)
-            tx.run(cypher, head=head, tail=tail, item_name=item_name)
+            tx.run(
+                cypher,
+                head=head,
+                tail=tail,
+                item_name=item_name,
+                tenant_id=access["tenant_id"],
+                graph_version=graph_version,
+            )
 
 
 class KnowledgeGraphNode(BaseNode):
@@ -222,6 +275,14 @@ class KnowledgeGraphNode(BaseNode):
     def process(self, state: ImportGraphState) -> ImportGraphState:
         # Step1: 参数校验
         validate_chunks, item_name = self._validate_get_inputs(state)
+        access = normalize_access_metadata(
+            tenant_id=state.get("tenant_id", "public"),
+            visibility=state.get("visibility", "public"),
+            acl_readers=state.get("acl_readers") or [],
+        )
+        graph_version = str(state.get("graph_version") or self.config.kg_graph_version).strip()
+        if not graph_version:
+            raise ValueError("graph_version is required for isolated KG writes")
         stats = ProcessingStats(total_chunks=len(validate_chunks))
         self.logger.info(f"开始构建知识图谱：{len(validate_chunks)}切片")
 
@@ -230,13 +291,41 @@ class KnowledgeGraphNode(BaseNode):
         neo4j_driver = get_neo4j_driver()
 
         # Step3: 幂等性处理（清理旧数据）
-        self._clear_existing_data(item_name, milvus_client, neo4j_driver)
+        self._clear_existing_data(
+            item_name,
+            access,
+            graph_version,
+            milvus_client,
+            neo4j_driver,
+        )
 
         # Step4: 并发处理每个切片
-        self._process_chunks_concurrently(stats, validate_chunks, milvus_client, neo4j_driver)
+        self._process_chunks_concurrently(
+            stats,
+            validate_chunks,
+            access,
+            graph_version,
+            milvus_client,
+            neo4j_driver,
+        )
 
         # Step5: 日志打印处理进度
         self.logger.info(stats.summary())
+        state["kg_import_stats"] = asdict(stats)
+        state["graph_version"] = graph_version
+        state["tenant_id"] = access["tenant_id"]
+        state["visibility"] = access["visibility"]
+
+        if stats.failed_chunks and self.config.kg_fail_on_partial:
+            raise LLMError(
+                f"KG import incomplete: {stats.failed_chunks}/{stats.total_chunks} chunks failed",
+                node_name=self.name,
+            )
+        if stats.total_entities == 0 and self.config.kg_require_nonempty:
+            raise LLMError(
+                "KG import produced no entities",
+                node_name=self.name,
+            )
 
         return state
 
@@ -290,18 +379,38 @@ class KnowledgeGraphNode(BaseNode):
 
         self.logger.info(f"参数校验完成: 原始 {len(chunks)} 块 -> 有效 {len(validated_chunks)} 块。")
 
-        return validated_chunks, global_item_name
+        item_names = {str(chunk["item_name"]).strip() for chunk in validated_chunks}
+        if len(item_names) != 1:
+            raise ValueError(
+                "one KG import must contain exactly one item_name; "
+                f"got {sorted(item_names)}"
+            )
+        normalized_item_name = next(iter(item_names))
+        if global_item_name and global_item_name != normalized_item_name:
+            raise ValueError(
+                "state item_name does not match chunk item_name: "
+                f"{global_item_name!r} != {normalized_item_name!r}"
+            )
+
+        return validated_chunks, normalized_item_name
 
     def _clear_existing_data(
             self,
             item_name: str,
+            access: Dict[str, Any],
+            graph_version: str,
             milvus_client: Optional[Any],
             neo4j_driver: Optional[Any],
     ) -> None:
         """导入前清理该 item_name 下的 Neo4j 图谱和 Milvus 实体数据。"""
 
         # 1. 清理 Neo4j 图谱数据
-        self._neo4j_writer.clear(neo4j_driver, item_name)
+        self._neo4j_writer.clear(
+            neo4j_driver,
+            item_name,
+            access["tenant_id"],
+            graph_version,
+        )
 
         # 2. 清理 Milvus 实体向量数据
         if not milvus_client:
@@ -315,7 +424,11 @@ class KnowledgeGraphNode(BaseNode):
             if milvus_client.has_collection(collection_name):
                 milvus_client.delete(
                     collection_name=collection_name,
-                    filter=f'item_name == "{item_name}"',
+                    filter=(
+                        f'item_name == {json.dumps(item_name)} and '
+                        f'tenant_id == {json.dumps(access["tenant_id"])} and '
+                        f'graph_version == {json.dumps(graph_version)}'
+                    ),
                 )
                 self.logger.info(f"Milvus 旧数据已清理: item_name={item_name}")
         except Exception as e:
@@ -325,6 +438,8 @@ class KnowledgeGraphNode(BaseNode):
             self,
             stats: ProcessingStats,
             validate_chunks: List[Dict[str, Any]],
+            access: Dict[str, Any],
+            graph_version: str,
             milvus_client: Any,
             neo4j_driver: Any,
     ) -> None:
@@ -343,6 +458,8 @@ class KnowledgeGraphNode(BaseNode):
                     content,
                     chunk_id,
                     chunk_item,
+                    access,
+                    graph_version,
                     milvus_client,
                     neo4j_driver,
                 )
@@ -356,6 +473,8 @@ class KnowledgeGraphNode(BaseNode):
                     stats.processed_chunks += 1
                     stats.total_entities += entity_count
                     stats.total_relations += relation_count
+                    if entity_count == 0:
+                        stats.empty_chunks += 1
                 except Exception as e:
                     stats.failed_chunks += 1
                     msg = f"切片 {chunk_id} 处理失败: {e}"
@@ -367,6 +486,8 @@ class KnowledgeGraphNode(BaseNode):
             content: str,
             chunk_id: str,
             item_name: str,
+            access: Dict[str, Any],
+            graph_version: str,
             milvus_client: Any,
             neo4j_driver: Any,
     ) -> Tuple[int, int]:
@@ -385,9 +506,25 @@ class KnowledgeGraphNode(BaseNode):
         # 4. 写入存储
         # 4.1 写入 Milvus，neo4j
         if entities:
-            self._milvus_writer.insert(milvus_client, entities, chunk_id, content, item_name)
+            self._milvus_writer.insert(
+                milvus_client,
+                entities,
+                chunk_id,
+                content,
+                item_name,
+                access,
+                graph_version,
+            )
             # 4.2 写入 Neo4j 图谱结构
-            self._neo4j_writer.insert(neo4j_driver, entities, relations, chunk_id, item_name)
+            self._neo4j_writer.insert(
+                neo4j_driver,
+                entities,
+                relations,
+                chunk_id,
+                item_name,
+                access,
+                graph_version,
+            )
 
         return len(entities), len(relations)
 
@@ -418,8 +555,11 @@ class KnowledgeGraphNode(BaseNode):
                     self.logger.warning(f"LLM 调用失败（第 {attempt} 次），{delay:.1f}s 后重试: {e}")
                     time.sleep(delay)
 
-        self.logger.error(f"LLM 提取最终失败（3 次）: {last_error}")
-        return ""
+        raise LLMError(
+            "KG extraction returned no content after 3 attempts",
+            node_name=self.name,
+            cause=last_error,
+        )
 
     def _parse_and_clean(self, llm_response: str) -> Dict[str, List]:
         """解析 LLM 输出的 JSON 并清洗实体和关系。"""
@@ -438,8 +578,11 @@ class KnowledgeGraphNode(BaseNode):
         try:
             parsed: Dict[str, Any] = json.loads(cleaned)
         except json.JSONDecodeError as error:
-            self.logger.error(f"解析 LLM 提取实体信息失败: {error}")
-            return empty_graph
+            raise LLMError(
+                "KG extraction returned invalid JSON",
+                node_name=self.name,
+                cause=error,
+            ) from error
 
         # 4. 获取并清洗实体
         raw_entities = parsed.get("entities", [])
@@ -549,6 +692,7 @@ class MilvusEntityWriter:
         self.milvus_url = milvus_url
         self.collection_name = collection_name
         self.logger = logging.getLogger(self.__class__.__name__)
+        self._collection_lock = threading.Lock()
 
     def insert(
             self,
@@ -557,6 +701,8 @@ class MilvusEntityWriter:
             chunk_id: str,
             content: str,
             item_name: str,
+            access: Dict[str, Any],
+            graph_version: str,
     ) -> None:
         """对外唯一入口：将实体写入 Milvus。"""
 
@@ -589,7 +735,15 @@ class MilvusEntityWriter:
             raise MilvusError(f"Milvus 创建集合失败: {e}", cause=e)
 
         # 6. 构建记录
-        records = self._build_records(entity_names, embedded_result, chunk_id, content, item_name)
+        records = self._build_records(
+            entity_names,
+            embedded_result,
+            chunk_id,
+            content,
+            item_name,
+            access,
+            graph_version,
+        )
         if not records:
             raise MilvusError("构建 Milvus 记录为空")
 
@@ -634,70 +788,92 @@ class MilvusEntityWriter:
         if not collection_name:
             raise MilvusError("ENTITY_NAME_COLLECTION 未配置")
 
-        # 1. 判断集合是否已存在
-        if client.has_collection(collection_name=collection_name):
-            return
+        # Multiple chunk workers may reach first use together. Serialize the
+        # check/create section so a collection race cannot turn a healthy chunk
+        # into a partial KG import.
+        with self._collection_lock:
+            if client.has_collection(collection_name=collection_name):
+                return
 
-        # 2. 构建 schema
-        schema = client.create_schema(enable_dynamic_fields=True)
-        schema.add_field(
-            field_name="pk",
-            datatype=DataType.INT64,
-            is_primary=True,
-            auto_id=True,
-        )
-        schema.add_field(
-            field_name="entity_name",
-            datatype=DataType.VARCHAR,
-            max_length=MAX_VARCHAR_LENGTH,
-        )
-        schema.add_field(
-            field_name="dense_vector",
-            datatype=DataType.FLOAT_VECTOR,
-            dim=vector_dim,
-        )
-        schema.add_field(
-            field_name="sparse_vector",
-            datatype=DataType.SPARSE_FLOAT_VECTOR,
-        )
-        schema.add_field(
-            field_name="source_chunk_id",
-            datatype=DataType.VARCHAR,
-            max_length=MAX_VARCHAR_LENGTH,
-        )
-        schema.add_field(
-            field_name="context",
-            datatype=DataType.VARCHAR,
-            max_length=MAX_VARCHAR_LENGTH,
-        )
-        schema.add_field(
-            field_name="item_name",
-            datatype=DataType.VARCHAR,
-            max_length=MAX_VARCHAR_LENGTH,
-        )
+            schema = client.create_schema(enable_dynamic_fields=True)
+            schema.add_field(
+                field_name="pk",
+                datatype=DataType.INT64,
+                is_primary=True,
+                auto_id=True,
+            )
+            schema.add_field(
+                field_name="entity_name",
+                datatype=DataType.VARCHAR,
+                max_length=MAX_VARCHAR_LENGTH,
+            )
+            schema.add_field(
+                field_name="dense_vector",
+                datatype=DataType.FLOAT_VECTOR,
+                dim=vector_dim,
+            )
+            schema.add_field(
+                field_name="sparse_vector",
+                datatype=DataType.SPARSE_FLOAT_VECTOR,
+            )
+            schema.add_field(
+                field_name="source_chunk_id",
+                datatype=DataType.VARCHAR,
+                max_length=MAX_VARCHAR_LENGTH,
+            )
+            schema.add_field(
+                field_name="context",
+                datatype=DataType.VARCHAR,
+                max_length=MAX_VARCHAR_LENGTH,
+            )
+            schema.add_field(
+                field_name="item_name",
+                datatype=DataType.VARCHAR,
+                max_length=MAX_VARCHAR_LENGTH,
+            )
+            schema.add_field(
+                field_name="tenant_id",
+                datatype=DataType.VARCHAR,
+                max_length=128,
+            )
+            schema.add_field(
+                field_name="visibility",
+                datatype=DataType.VARCHAR,
+                max_length=16,
+            )
+            schema.add_field(
+                field_name="graph_version",
+                datatype=DataType.VARCHAR,
+                max_length=128,
+            )
+            schema.add_field(
+                field_name="acl_readers",
+                datatype=DataType.ARRAY,
+                element_type=DataType.VARCHAR,
+                max_capacity=128,
+                max_length=256,
+            )
 
-        # 3. 构建索引
-        index_params = client.prepare_index_params()
-        index_params.add_index(
-            field_name="dense_vector",
-            index_name="dense_vector_index",
-            index_type="IVF_FLAT",
-            metric_type="COSINE",
-            params={"nlist": 128},
-        )
-        index_params.add_index(
-            field_name="sparse_vector",
-            index_name="sparse_vector_index",
-            index_type="SPARSE_INVERTED_INDEX",
-            metric_type="IP",
-        )
+            index_params = client.prepare_index_params()
+            index_params.add_index(
+                field_name="dense_vector",
+                index_name="dense_vector_index",
+                index_type="IVF_FLAT",
+                metric_type="COSINE",
+                params={"nlist": 128},
+            )
+            index_params.add_index(
+                field_name="sparse_vector",
+                index_name="sparse_vector_index",
+                index_type="SPARSE_INVERTED_INDEX",
+                metric_type="IP",
+            )
 
-        # 4. 创建集合
-        client.create_collection(
-            collection_name=collection_name,
-            schema=schema,
-            index_params=index_params,
-        )
+            client.create_collection(
+                collection_name=collection_name,
+                schema=schema,
+                index_params=index_params,
+            )
 
     @staticmethod
     def _build_records(
@@ -706,6 +882,8 @@ class MilvusEntityWriter:
             chunk_id: str,
             content: str,
             item_name: str,
+            access: Dict[str, Any],
+            graph_version: str,
     ) -> List[Dict[str, Any]]:
         """组装插入记录。"""
 
@@ -748,6 +926,10 @@ class MilvusEntityWriter:
                 "entity_name": entity_name,
                 "context": context,
                 "item_name": item_name,
+                "tenant_id": access["tenant_id"],
+                "visibility": access["visibility"],
+                "acl_readers": access["acl_readers"],
+                "graph_version": graph_version,
                 "source_chunk_id": chunk_id,
                 "dense_vector": dense,
                 "sparse_vector": sparse_dict,

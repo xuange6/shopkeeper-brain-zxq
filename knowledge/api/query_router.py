@@ -18,6 +18,28 @@ from knowledge.schema.query_schema import (
 )
 from knowledge.utils.sse_util import sse_generator
 from knowledge.utils.task_utils import get_done_task_list
+from knowledge.security.access_control import (
+    AccessContext,
+    AccessContextError,
+    scope_session_id,
+    verify_access_context_token,
+)
+
+
+def get_request_access_context(request: Request) -> AccessContext:
+    """Verify gateway-issued identity; unsigned requests remain public-only."""
+
+    authorization = str(request.headers.get("authorization") or "").strip()
+    if not authorization:
+        return AccessContext.public(os.getenv("ACCESS_DEFAULT_TENANT", "public"))
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "shopkeeper" or not token:
+        raise HTTPException(status_code=401, detail="invalid access context scheme")
+    secret = os.getenv("ACCESS_CONTEXT_HMAC_SECRET", "")
+    try:
+        return verify_access_context_token(token, secret)
+    except AccessContextError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
 
 
 def register_query_router(app: FastAPI) -> None:
@@ -30,8 +52,10 @@ def register_query_router(app: FastAPI) -> None:
         request: QueryRequest,
         background_tasks: BackgroundTasks,
         service=Depends(get_query_service),
+        access_context: AccessContext = Depends(get_request_access_context),
     ):
-        session_id = request.session_id or service.generate_session_id()
+        public_session_id = request.session_id or service.generate_session_id()
+        session_id = scope_session_id(public_session_id, access_context)
         task_id = service.generate_task_id()
         service.submit_query(task_id, request.is_stream)
 
@@ -43,10 +67,12 @@ def register_query_router(app: FastAPI) -> None:
                 request.query,
                 True,
                 request.item_names,
+                False,
+                access_context.to_state(),
             )
             return StreamSubmitResponse(
                 message="Query submitted",
-                session_id=session_id,
+                session_id=public_session_id,
                 task_id=task_id,
             )
 
@@ -56,12 +82,14 @@ def register_query_router(app: FastAPI) -> None:
             request.query,
             False,
             request.item_names,
+            False,
+            access_context.to_state(),
         )
         error = service.get_error(task_id)
         if error:
             return QueryResponse(
                 message="处理失败",
-                session_id=session_id,
+                session_id=public_session_id,
                 answer="",
                 done_list=get_done_task_list(task_id),
                 error=error,
@@ -70,7 +98,7 @@ def register_query_router(app: FastAPI) -> None:
 
         return QueryResponse(
             message="处理完成",
-            session_id=session_id,
+            session_id=public_session_id,
             answer=service.get_answer(task_id),
             done_list=get_done_task_list(task_id),
             error="",
@@ -96,9 +124,15 @@ def register_query_router(app: FastAPI) -> None:
         session_id: str,
         limit: int = Query(50, ge=1, le=200),
         service=Depends(get_query_service),
+        access_context: AccessContext = Depends(get_request_access_context),
     ):
         try:
-            items = service.get_history(session_id, limit)
+            items = service.get_history(
+                scope_session_id(session_id, access_context), limit
+            )
+            for item in items:
+                if isinstance(item, dict):
+                    item["session_id"] = session_id
             return {"session_id": session_id, "items": items}
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"history error: {exc}") from exc
@@ -107,8 +141,9 @@ def register_query_router(app: FastAPI) -> None:
     async def clear_chat_history(
         session_id: str,
         service=Depends(get_query_service),
+        access_context: AccessContext = Depends(get_request_access_context),
     ):
-        count = service.clear_history(session_id)
+        count = service.clear_history(scope_session_id(session_id, access_context))
         return {"message": "History cleared", "deleted_count": count}
 
 

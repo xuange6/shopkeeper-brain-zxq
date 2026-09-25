@@ -1,6 +1,6 @@
 """File import API router."""
 
-from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, UploadFile
 
 from knowledge.core.deps import get_file_import_service, get_task_service
 from knowledge.schema.task_schema import TaskStatusResponse
@@ -19,11 +19,12 @@ def _regist_router(app: FastAPI):
     def upload_file_endpoint(
             background_tasks: BackgroundTasks,
             file: UploadFile = File(...),
+            document_key: str | None = Form(None),
             service: FileImportService = Depends(get_file_import_service)
     ) -> UploadResponse:
         # 1. Synchronous processing: save file + upload MinIO.
         try:
-            task_id, file_dir, import_file_path = service.process_file_upload(file)
+            task_id, file_dir, import_file_path = service.process_file_upload(file, document_key)
         except UploadTooLargeError as exc:
             raise HTTPException(status_code=413, detail=str(exc)) from exc
         except UploadValidationError as exc:
@@ -31,7 +32,7 @@ def _regist_router(app: FastAPI):
 
         # 2. Background processing: run the LangGraph import pipeline.
         background_tasks.add_task(
-            service.run_upload_file_task, task_id, file_dir, import_file_path
+            service.run_upload_file_task, task_id, file_dir, import_file_path, document_key
         )
 
         return UploadResponse(message="文件已进入知识库处理队列", task_id=task_id)

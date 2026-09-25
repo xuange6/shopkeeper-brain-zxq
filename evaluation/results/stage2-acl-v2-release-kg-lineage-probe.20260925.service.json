@@ -1,0 +1,240 @@
+{
+  "schema_version": "stage2-kg-probe-v1",
+  "created_at": "2026-09-25T12:19:07.765747+00:00",
+  "provider": "service",
+  "evaluation_scope": "full_pipeline_live_probe",
+  "passed": true,
+  "assertions": {
+    "runtime_preflight_passed": true,
+    "provider_error_empty": true,
+    "kg_stage_status_ok": true,
+    "kg_retrieval_count_positive": true,
+    "kg_trace_nonempty": true,
+    "kg_trace_has_document_lineage": true,
+    "kg_trace_has_graph_source_type": true,
+    "versioned_graph_selected": true,
+    "versioned_entity_collection_selected": true
+  },
+  "configuration": {
+    "chunks_collection": "kb_chunks_ir_stage2_release_20260925",
+    "entity_name_collection": "kb_graph_entities_stage2_release_20260925",
+    "kg_graph_version": "stage2-acl-kg-release-20260925",
+    "acl_policy_version": "retrieval-acl-v1",
+    "retrieval_policy_version": "stage2-industrial-rag-v2"
+  },
+  "latency_ms": 28200.925,
+  "error": "",
+  "answer": "HAK 180 的部件与操作步骤之间存在直接的使用和操作关系，具体如下：[1]\n- 进纸托板（部件编号1）用于装载介质，是进行烫金转印操作的基础组件 [2]。\n- 可伸缩进纸托板翼板（部件编号2）可调整长度以适配不同尺寸的介质，属于操作中需调节的部件 [2]。\n- 导纸板（部件编号3）用于调整宽度以匹配介质尺寸，是操作中必须设置的部件 [1]。\n- 进纸调节器舱盖（部件编号4）用于调整进纸调节器，是影响介质进纸精度的操作部件 [1]。\n- 前盖（部件编号5）在打开后才能安装或取出烫金膜盒支架和烫金膜盒组件，是执行更换耗材操作的关键部件 [2]。\n- 操作面板（部件编号6）用于控制设备的开关、启动/停止烫金转印及更改设置，是所有操作的核心交互界面 [1]。\n- 前盖把手（部件编号7）用于开启前盖，是执行前盖操作的物理辅助部件 [1]。\n- 出纸托板（部件编号8）用于接收完成烫金后的介质，是操作流程的输出端 [2]。\n\n此外，烫金膜盒支架和烫金膜盒组件作为独立部件，在操作中需通过前盖打开后进行安装或取出，其操作受设备状态（如温度、转印中、电源状态）影响 [3]。\n【图片】\n<http://192.168.200.130:9000/knowledge-base-v2/documents/doc_f84fe61b98d713e67f373ccb/assets/blk_f64b0c7050696c908c08f807.jpg>",
+  "retrieval_counts": {
+    "embedding": 10,
+    "hyde": 10,
+    "knowledge_graph": 20,
+    "web": 3,
+    "rrf": 20,
+    "rerank": 6
+  },
+  "kg_status": {
+    "status": "ok",
+    "reason": ""
+  },
+  "kg_trace": [
+    {
+      "rank": 1,
+      "chunk_id": "chk_77a26f93924939b3605b7952",
+      "document_id": "doc_f84fe61b98d713e67f373ccb",
+      "section_id": "sec_d15a42913c42d537e2be4e2c",
+      "file_title": "hak180使用说明书",
+      "title": "3.2 去除保护材料",
+      "score": 6.0,
+      "source_type": "knowledge_graph"
+    },
+    {
+      "rank": 2,
+      "chunk_id": "chk_8d202caf96320d2aebde5c9e",
+      "document_id": "doc_f84fe61b98d713e67f373ccb",
+      "section_id": "sec_b2d89b73b68e6d95bc2e772c",
+      "file_title": "hak180使用说明书",
+      "title": "3 使用本设备之前 6",
+      "score": 5.0,
+      "source_type": "knowledge_graph"
+    },
+    {
+      "rank": 3,
+      "chunk_id": "chk_3dc4e0111961fffc5e8a5493",
+      "document_id": "doc_f84fe61b98d713e67f373ccb",
+      "section_id": "sec_c2b2c63c71af3e0923ff8edc",
+      "file_title": "hak180使用说明书",
+      "title": "注释",
+      "score": 3.0,
+      "source_type": "knowledge_graph"
+    },
+    {
+      "rank": 4,
+      "chunk_id": "chk_5cd59de19b9b8e9b10652b85",
+      "document_id": "doc_f84fe61b98d713e67f373ccb",
+      "section_id": "sec_d15a42913c42d537e2be4e2c",
+      "file_title": "hak180使用说明书",
+      "title": "3.2 去除保护材料",
+      "score": 3.0,
+      "source_type": "knowledge_graph"
+    },
+    {
+      "rank": 5,
+      "chunk_id": "chk_008755aec54e7cc25e98b023",
+      "document_id": "doc_f84fe61b98d713e67f373ccb",
+      "section_id": "sec_ec3eb88980f09344396ae02f",
+      "file_title": "hak180使用说明书",
+      "title": "警告",
+      "score": 1.0,
+      "source_type": "knowledge_graph"
+    },
+    {
+      "rank": 6,
+      "chunk_id": "chk_1228afd2909e67595038b58f",
+      "document_id": "doc_f84fe61b98d713e67f373ccb",
+      "section_id": "sec_fbc04fe681b41cae7fa75f46",
+      "file_title": "hak180使用说明书",
+      "title": "5 使用设备",
+      "score": 1.0,
+      "source_type": "knowledge_graph"
+    },
+    {
+      "rank": 7,
+      "chunk_id": "chk_2db283d3ee9645ac199c903b",
+      "document_id": "doc_f84fe61b98d713e67f373ccb",
+      "section_id": "sec_018111429c2520c5f28e946a",
+      "file_title": "hak180使用说明书",
+      "title": "6.3.1 调整转印温度",
+      "score": 1.0,
+      "source_type": "knowledge_graph"
+    },
+    {
+      "rank": 8,
+      "chunk_id": "chk_4335370e863fa8c8a7919475",
+      "document_id": "doc_f84fe61b98d713e67f373ccb",
+      "section_id": "sec_f683a1a522b5ffbf760b81a3",
+      "file_title": "hak180使用说明书",
+      "title": "警告",
+      "score": 1.0,
+      "source_type": "knowledge_graph"
+    },
+    {
+      "rank": 9,
+      "chunk_id": "chk_47f51565ec99594ba72c754e",
+      "document_id": "doc_f84fe61b98d713e67f373ccb",
+      "section_id": "sec_41bb16925a4dadeeebc20eb7",
+      "file_title": "hak180使用说明书",
+      "title": "8 故障排除 42",
+      "score": 1.0,
+      "source_type": "knowledge_graph"
+    },
+    {
+      "rank": 10,
+      "chunk_id": "chk_6569426bfb946a795527c072",
+      "document_id": "doc_f84fe61b98d713e67f373ccb",
+      "section_id": "sec_32c68c4b6dafc215ced64700",
+      "file_title": "hak180使用说明书",
+      "title": "更改设置",
+      "score": 1.0,
+      "source_type": "knowledge_graph"
+    }
+  ],
+  "access_control": {
+    "version": "retrieval-acl-v1",
+    "tenant_id": "public",
+    "authenticated": false,
+    "subject_hash": "2f183a4e6449",
+    "role_count": 0,
+    "group_count": 0,
+    "authn_method": "internal",
+    "enforcement": "pre_retrieval"
+  },
+  "runtime_preflight": {
+    "passed": true,
+    "checks": [
+      {
+        "name": "milvus",
+        "status": "ok",
+        "reason": "configured endpoint reachable"
+      },
+      {
+        "name": "neo4j",
+        "status": "ok",
+        "reason": "configured endpoint reachable"
+      },
+      {
+        "name": "mongodb",
+        "status": "ok",
+        "reason": "configured endpoint reachable"
+      },
+      {
+        "name": "web_mcp",
+        "status": "ok",
+        "reason": "configured endpoint reachable"
+      },
+      {
+        "name": "llm_api",
+        "status": "ok",
+        "reason": "configured endpoint reachable"
+      },
+      {
+        "name": "embedding_model",
+        "status": "ok",
+        "reason": "local path exists"
+      },
+      {
+        "name": "reranker_model",
+        "status": "ok",
+        "reason": "local path exists"
+      }
+    ],
+    "failures": []
+  },
+  "model_usage": {
+    "call_count": 3,
+    "failed_call_count": 0,
+    "input_tokens": 2558,
+    "output_tokens": 581,
+    "total_tokens": 3139,
+    "estimated_cost_usd": 0.0,
+    "cost": 0.0012552,
+    "currency": "CNY",
+    "cost_status": "available",
+    "pricing_fingerprint": "dff7920ae0a2f1374786cb4e00169c25ed772923f8c493952fe3af7f348eab24",
+    "by_operation": {
+      "kg_entity": {
+        "call_count": 1,
+        "failed_call_count": 0,
+        "input_tokens": 208,
+        "output_tokens": 10,
+        "total_tokens": 218,
+        "cost": 4.62e-05,
+        "latency_ms": 494.523
+      },
+      "hyde": {
+        "call_count": 1,
+        "failed_call_count": 0,
+        "input_tokens": 108,
+        "output_tokens": 149,
+        "total_tokens": 257,
+        "cost": 0.0002397,
+        "latency_ms": 1462.924
+      },
+      "answer": {
+        "call_count": 1,
+        "failed_call_count": 0,
+        "input_tokens": 2242,
+        "output_tokens": 422,
+        "total_tokens": 2664,
+        "cost": 0.0009693,
+        "latency_ms": 3629.024
+      }
+    },
+    "latency_ms": 5586.471,
+    "estimated_token_count": false,
+    "models": [
+      "qwen-flash"
+    ],
+    "usage_complete": true
+  }
+}

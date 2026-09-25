@@ -22,6 +22,7 @@ def get_llm_client(
         json_mode: bool = False,
         temperature: Optional[float] = None,
         trace_id: str = "",
+        operation: str = "unspecified",
 ) -> ChatOpenAI:
     """
     获取 LLM 客户端。
@@ -64,7 +65,12 @@ def get_llm_client(
     if trace_id:
         from knowledge.observability.model_usage import ObservedChatModel
 
-        return ObservedChatModel(client, trace_id=trace_id, model=model_name)
+        return ObservedChatModel(
+            client,
+            trace_id=trace_id,
+            model=model_name,
+            operation=operation,
+        )
     return client
 
 

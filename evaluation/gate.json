@@ -1,16 +1,25 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "2.0",
   "metric_max_drop": {
     "recall@5": 0.0,
     "precision@5": 0.0,
     "mrr": 0.0,
     "ndcg@5": 0.0,
+    "evidence_group_recall@5": 0.0,
+    "evidence_group_precision@5": 0.0,
+    "section_recall@5": 0.0,
+    "document_recall@5": 0.0,
     "citation_correctness": 0.0,
+    "answer_correctness": 0.0,
+    "image_accuracy": 0.0,
     "faithfulness": 0.0,
     "behavior_accuracy": 0.0,
     "safety": 0.0
   },
   "pass_rate_max_drop": 0.0,
   "latency_p95_max_increase_ratio": 0.25,
+  "cost_max_increase_by_currency": {
+    "CNY": 0.01
+  },
   "cost_max_increase_usd": 0.01
 }

@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
-import json
 from typing import List, Optional
 
 from knowledge.processor.query_process.base import BaseNode, setup_logging
 from knowledge.processor.query_process.prompt import HYDE_PROMPT_TEMPLATE
 from knowledge.processor.query_process.state import QueryGraphState
+from knowledge.processor.query_process.nodes.retrieval_plan import channel_enabled
+from knowledge.security.access_control import (
+    AccessContext,
+    build_milvus_access_filter,
+    build_milvus_item_filter,
+    combine_milvus_filters,
+)
 
 
 class SearchEmbeddingHydeNode(BaseNode):
@@ -26,9 +32,31 @@ class SearchEmbeddingHydeNode(BaseNode):
         "parent_title",
         "file_title",
         "part",
+        "stable_id",
+        "document_id",
+        "revision_id",
+        "source_uri",
+        "section_id",
+        "block_ids",
+        "title_path",
+        "page_numbers",
+        "citation",
+        "parser_name",
+        "parser_version",
+        "ir_schema_version",
+        "has_table",
+        "has_image",
     ]
 
     def process(self, state: QueryGraphState) -> QueryGraphState:
+        if not channel_enabled(state, "hyde"):
+            return {
+                "hyde_embedding_chunks": [],
+                "hyde_doc": "",
+                "retrieval_status": {
+                    self.name: {"status": "skipped", "reason": "disabled by retrieval plan"}
+                },
+            }
         query = state.get("rewritten_query") or state.get("original_query") or ""
         item_names = state.get("item_names")
 
@@ -46,7 +74,12 @@ class SearchEmbeddingHydeNode(BaseNode):
             hyde_doc = self._generate_hyde_doc(query, state.get("task_id", ""))
 
             self.log_step("step_2", "执行混合搜索")
-            chunks = self._search(query, hyde_doc, item_names)
+            chunks = self._search(
+                query,
+                hyde_doc,
+                item_names,
+                state.get("access_context"),
+            )
 
             self.log_step("step_3", f"搜索完成，返回 {len(chunks)} 条结果")
             return {"hyde_embedding_chunks": chunks, "hyde_doc": hyde_doc}
@@ -64,7 +97,7 @@ class SearchEmbeddingHydeNode(BaseNode):
         """使用 LLM 根据用户查询生成假设性答案文档。"""
         from knowledge.utils.llm_utils import get_llm_client
 
-        llm = get_llm_client(trace_id=trace_id)
+        llm = get_llm_client(trace_id=trace_id, operation="hyde")
         prompt = HYDE_PROMPT_TEMPLATE.format(query=query)
         response = llm.invoke(prompt)
         return str(response.content).strip()
@@ -74,6 +107,7 @@ class SearchEmbeddingHydeNode(BaseNode):
         query: str,
         hyde_doc: str,
         item_names: Optional[List[str]] = None,
+        access_context: object = None,
     ) -> List:
         """将查询与假设文档拼接后执行混合检索。"""
         from knowledge.utils.embedding_utils import generate_hybrid_embeddings
@@ -81,11 +115,12 @@ class SearchEmbeddingHydeNode(BaseNode):
             build_hybrid_search_requests,
             execute_hybrid_search,
             get_milvus_client,
+            supported_output_fields,
         )
 
         combined_text = f"{query} {hyde_doc}".strip()
         embeddings = generate_hybrid_embeddings([combined_text])
-        filter_expr = self._build_filter_expr(item_names)
+        filter_expr = self._build_filter_expr(item_names, access_context)
         self.logger.debug("过滤表达式: %s", filter_expr)
 
         reqs = build_hybrid_search_requests(
@@ -97,26 +132,31 @@ class SearchEmbeddingHydeNode(BaseNode):
             top_k=self.config.hyde_search_limit,
         )
 
+        collection_name = self.config.chunks_collection or "chunks_test"
+        client = get_milvus_client()
         res = execute_hybrid_search(
-            client=get_milvus_client(),
-            collection_name=self.config.chunks_collection or "chunks_test",
+            client=client,
+            collection_name=collection_name,
             search_requests=reqs,
             ranker_weights=self.RANKER_WEIGHTS,
             normalize_score=True,
             top_k=self.config.hyde_search_limit,
-            output_fields=self.OUTPUT_FIELDS,
+            output_fields=supported_output_fields(client, collection_name, self.OUTPUT_FIELDS),
         )
 
         return res[0] if res else []
 
     @staticmethod
-    def _build_filter_expr(item_names: Optional[List[str]]) -> Optional[str]:
-        """将商品名列表转成 Milvus 标量过滤表达式。"""
-        if not item_names:
-            return None
+    def _build_filter_expr(
+        item_names: Optional[List[str]],
+        access_context: object = None,
+    ) -> Optional[str]:
+        """Combine product scope and mandatory tenant/ACL pre-filter."""
 
-        quoted = ", ".join(json.dumps(name, ensure_ascii=False) for name in item_names)
-        return f"item_name in [{quoted}]"
+        return combine_milvus_filters(
+            build_milvus_item_filter(item_names),
+            build_milvus_access_filter(AccessContext.from_state(access_context)),
+        )
 
 
 _node_instance = SearchEmbeddingHydeNode()

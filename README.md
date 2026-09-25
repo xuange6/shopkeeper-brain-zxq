@@ -2,9 +2,9 @@
 
 # Shopkeeper Brain
 
-### 店小智 · Hybrid RAG Knowledge Studio
+### 店小智 · Industrial RAG Knowledge Studio
 
-把 PDF / Markdown 变成可以检索、可以追溯，也可以流式问答的多模态知识库。
+把 PDF / Markdown 变成可检索、可追溯、可授权、可评测、可回滚的多模态知识库。
 
 Python 3.10+ · FastAPI · LangGraph · BGE-M3 · Milvus · Neo4j · MongoDB · MinIO
 
@@ -12,9 +12,9 @@ Python 3.10+ · FastAPI · LangGraph · BGE-M3 · Milvus · Neo4j · MongoDB · 
 
 ---
 
-这是我在做知识库项目时整理出来的一版完整实现。最开始的目标很简单：把手册和 Markdown 文档放进来，然后能够问问题。实际做下来，真正麻烦的是文档解析、图片、检索结果合并、引用和失败处理，所以现在项目里把这些环节都串起来了。
+Shopkeeper Brain 不只是“召回几段文本再交给大模型”。当前阶段 2 把文档结构化 IR、多路检索、知识图谱、Web 路由、校准拒答、逐声明引用、安全策略、费用核算和发布回滚串成了一条可观测的工业级 RAG 管线。
 
-项目里有两条 LangGraph 工作流：导入流程负责文档解析、图片理解、结构化切片和多存储入库；查询流程并行跑混合向量、HyDE、知识图谱和联网检索，再经过 RRF 和 BGE Reranker，最后生成带引用的回答。这样做的目的，是让答案尽量有证据可查，而不是只返回一段看起来合理的文字。
+阶段 2 已于 2026-09-25 通过真实服务门禁。当前发布候选在冻结的 12 个用例上通过 12/12，核心用例 9/9；自动化测试通过 230/230。阶段 0、阶段 1 以及阶段 2 中间失败证据均保留，没有回写或覆盖。
 
 <table>
   <tr>
@@ -22,124 +22,122 @@ Python 3.10+ · FastAPI · LangGraph · BGE-M3 · Milvus · Neo4j · MongoDB · 
     <td width="50%"><img src="docs/images/import-preview.png" alt="知识导入工作台"></td>
   </tr>
   <tr>
-    <td align="center">智能问答 · 流式步骤 / 引用证据 / 检索轨迹</td>
-    <td align="center">知识导入 · 批量上传 / 节点进度 / 失败反馈</td>
+    <td align="center">智能问答 · 引用证据 / 检索轨迹 / 流式进度</td>
+    <td align="center">知识导入 · 结构化 IR / 资产血缘 / 失败反馈</td>
   </tr>
 </table>
 
-## 目前做了哪些事情
+## 阶段 2 实测结果
 
-| 能力 | 实现 |
-| --- | --- |
-| 多模态导入 | MinerU PDF → Markdown，VLM 图片摘要与对象存储 URL |
-| 结构化切片 | Markdown 1–6 级标题、父标题继承、递归切分、短块合并、重叠窗口 |
-| 混合检索 | BGE-M3 Dense + Sparse、商品名标量过滤 |
-| 多路召回 | Direct Hybrid、HyDE、Neo4j KG、MCP Web Search 并行执行 |
-| 排序融合 | RRF 粗排、BGE Reranker 精排、断崖式动态 Top-K |
-| 可信回答 | 空证据/低分拒答、正文 [1][2] 引用、结构化 sources/images/timings |
-| 实时体验 | SSE Token 流、LangGraph 节点进度、任务状态与会话历史 |
-| 前端界面 | 统一深色 Knowledge Studio、响应式问答页、批量拖拽导入 |
-| 工程化 | 统一 ASGI 入口、CORS 白名单、上传校验、健康接口、Compose 基础设施 |
+以下数据来自当前代码、真实 Milvus / Neo4j / MongoDB / Web / 模型服务，同一数据集每个用例执行 3 次。candidate 只与同轮 control 比较，使用仓库原有 `evaluation/gate.json`，没有降低门槛。
 
-## 整体架构
+| 指标 | Control | Candidate | 结果 |
+| --- | ---: | ---: | --- |
+| 通过用例 | 12/12 | 12/12 | PASS |
+| Recall@5 | 0.944444 | 0.944444 | 无回退 |
+| Evidence-group / Section / Document Recall@5 | 0.944444 | 0.944444 | 无回退 |
+| Citation correctness / Faithfulness | 1.0 / 1.0 | 1.0 / 1.0 | 通过 |
+| 图片 / 行为 / 安全准确率 | 1.0 / 1.0 / 1.0 | 1.0 / 1.0 / 1.0 | 通过 |
+| P95 延迟 | 6072.658 ms | 5918.720 ms | -2.53% |
+| Token | 80,482 | 80,275 | -0.26% |
+| 真实费用 | CNY 0.02296815 | CNY 0.02272920 | -1.04% |
+| 成本状态 | available | available | 通过 |
+
+Candidate 的 KG Recall@5 为 0.111111；独立真实 KG 探针召回 20 条 evidence，并验证 document、section、chunk 血缘及 `knowledge_graph` 来源类型。当前 query pipeline 指纹为 `56fdc795661541578271caf3a370eb12b4822d5a0a16597e9f1242f81718b07c`，pricing 指纹为 `dff7920ae0a2f1374786cb4e00169c25ed772923f8c493952fe3af7f348eab24`。
+
+完整证据见：
+
+- [阶段 2 架构 ADR](docs/roadmap/STAGE2_ARCHITECTURE_ADR.md)
+- [阶段 2 最终验证](docs/roadmap/STAGE2_VALIDATION_20260925.md)
+- [当前阶段状态](docs/roadmap/CURRENT_STAGE.md)
+- `evaluation/results/stage2-acl-v2-release-control.20260925.service.full.*`
+- `evaluation/results/stage2-acl-v2-release-candidate.20260925.service.full.*`
+- `evaluation/results/stage2-acl-v2-release-kg-lineage-probe.20260925.service.json`
+- `evaluation/baselines/stage2-industrial-rag-v2.0.0.20260925.service.full.*`
+
+## 查询架构
 
 ```mermaid
 flowchart LR
-    U[PDF / Markdown] --> API[FastAPI Upload API]
-    API --> MIO[(MinIO)]
-    API --> IG[Import LangGraph]
-    IG --> MINERU[MinerU / Markdown]
-    MINERU --> VLM[VLM Image Caption]
-    VLM --> SPLIT[Heading-aware Chunking]
-    SPLIT --> BGE[BGE-M3 Dense + Sparse]
-    BGE --> MILVUS[(Milvus)]
-    SPLIT --> KG[Entity & Relation Extraction]
-    KG --> NEO4J[(Neo4j)]
-
-    Q[User Question] --> QG[Query LangGraph]
-    MONGO[(MongoDB History)] --> QG
-    QG --> DIRECT[Hybrid Search]
-    QG --> HYDE[HyDE Search]
-    QG --> GRAPH[Knowledge Graph]
-    QG --> WEB[MCP Web Search]
-    DIRECT --> RRF[RRF Fusion]
+    Q[用户问题] --> ACL[签名身份与 ACL]
+    ACL --> POLICY[意图与安全策略]
+    POLICY --> PLAN[Retrieval Plan]
+    PLAN --> DIRECT[Direct Hybrid]
+    PLAN --> HYDE[HyDE]
+    PLAN --> KG[Knowledge Graph]
+    PLAN --> WEB[Local-first / Web-fallback]
+    DIRECT --> RRF[Weighted RRF]
     HYDE --> RRF
-    GRAPH --> RRF
-    RRF --> RERANK[BGE Reranker]
-    WEB --> RERANK
-    RERANK --> LLM[Grounded LLM Answer]
-    LLM --> SSE[SSE + Sources + Timings]
+    KG --> RRF
+    WEB --> RRF
+    RRF --> RERANK[Calibrated Rerank]
+    RERANK --> DECIDE[证据覆盖与拒答决策]
+    DECIDE --> ANSWER[Grounded Answer]
+    ANSWER --> VERIFY[Claim-Evidence Verification]
+    VERIFY --> DLP[Output DLP]
+    DLP --> OUT[SSE / Sources / Diagnostics]
 ```
 
-### 导入工作流
+关键设计：
 
-```text
-Entry → PDF/MD 分流 → MinerU → 图片理解 → 标题切片
-      → 商品名识别 → BGE-M3 向量化 → Milvus → Neo4j（可选）
+- 身份、租户、角色和组只能来自服务端签名的短期上下文；请求正文不能自报权限。Direct、HyDE、KG 实体对齐、Neo4j 扩展和 chunk 回填都在召回前执行 ACL。
+- 安全意图、Prompt Injection、普通业务问题、知识不足、实体歧义和时效问题走独立策略。注入内容被清洗后，合法业务问题仍会继续回答。
+- Product / Safety 查询本地权威资料优先；只有时效意图或本地证据不足时才调用 Web。普通网页不能证明产品能力。
+- reranker 原始 logit 只用于诊断；拒答使用校准相关性、Top-1 分差、authority、结构匹配和证据覆盖率的组合置信度。
+- 答案先拆成 claim，再逐条绑定 evidence。无法核验的 claim 会被删除、降级或标记不确定，引用不会在答案生成后随意拼接。
+- chunk 指标保留用于诊断，同时计算 canonical evidence-group、section 和 document 指标，避免靠重复 chunk 提高分数。
+- Query rewrite、HyDE、KG entity 和 answer 分操作记录调用、Token、延迟与费用；费率、币种、区域、来源和生效日期位于 `config/model_pricing.json`。
+
+## 导入架构
+
+```mermaid
+flowchart LR
+    U[PDF / Markdown] --> PARSE[MinerU / Markdown Adapter]
+    PARSE --> IR[Document IR]
+    IR --> ASSET[图片校验与 VLM 摘要]
+    IR --> SPLIT[结构感知切片]
+    SPLIT --> EMB[BGE-M3 Dense + Sparse]
+    EMB --> MILVUS[(Milvus)]
+    SPLIT --> EXTRACT[实体与关系抽取]
+    EXTRACT --> NEO4J[(Versioned Neo4j Graph)]
+    IR --> LINEAGE[Document / Revision / Page / Block / Chunk Lineage]
 ```
 
-### 查询工作流
-
-```text
-历史会话 → 商品名确认 / Query Rewrite
-        → [Direct | HyDE | KG | Web] 并行召回
-        → RRF → Rerank + 动态截断 → Grounded Answer → SSE
-```
+文档 IR 保留标题层级、表格归属、图片资产、页码、坐标和稳定血缘。新版本索引写入显式命名的 shadow collection；当前线上集合不会被建索引脚本直接覆盖。
 
 ## 快速开始
 
-下面是我本地开发时使用的启动顺序。第一次安装模型和 MinerU 依赖会比较久，先准备好 Python、Docker 以及可用的模型服务。
-
-### 1. 准备 Python
+### 1. 安装依赖
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-pip install -r requirements-mineru.txt
+pip install -r requirements.txt
 ```
 
-只想先调 API 或 Markdown 流程时，可以安装相对轻量的 `requirements.txt`。MinerU 和本地 BGE 模型占用的依赖比较大；如果使用 GPU 版 PyTorch，请按照自己的 CUDA 版本从 PyTorch 官网安装，不要直接复制别人的 CUDA wheel。
+需要 PDF / MinerU 和完整本地模型能力时，改为安装 `requirements-mineru.txt`。GPU 版 PyTorch 应按本机 CUDA 版本安装。
 
 ### 2. 启动基础设施
 
 ```powershell
 docker compose up -d
+docker compose ps
 ```
 
-Compose 会启动 Milvus、MongoDB、Neo4j、MinIO，以及 Milvus 需要的 etcd。开发环境默认连接信息如下：
+Compose 会启动 Milvus、MongoDB、Neo4j、MinIO 和 etcd。2026-09 起上游不再公开原 MinIO 历史镜像，因此 Compose 使用内容摘要固定的归档副本；摘要仍是阶段 2 验证所用的 `a1ea29fa…b015e`，不会跟随浮动标签升级。
 
-| 服务 | 地址 | 开发凭据 |
-| --- | --- | --- |
-| Milvus | `http://127.0.0.1:19530` | 无 |
-| MongoDB | `mongodb://127.0.0.1:27017` | 无 |
-| Neo4j Browser | `http://127.0.0.1:7474` | `neo4j / shopkeeper-dev` |
-| MinIO Console | `http://127.0.0.1:9001` | `minioadmin / minioadmin` |
+默认端口：Milvus `19530`、MongoDB `27017`、Neo4j Browser `7474`、MinIO API / Console `9000` / `9001`。Compose 中的默认凭据仅限本机开发，生产部署必须替换。
 
-这些凭据只适合本机开发，部署前请换掉。
-
-### 3. 配置环境变量
+### 3. 配置应用
 
 ```powershell
 Copy-Item knowledge\.env.example knowledge\.env
 ```
 
-至少需要配置：
+至少配置模型服务、BGE-M3 / reranker 路径、Milvus、Neo4j、MongoDB 和 MinIO。启用受保护数据前必须配置强随机 `ACCESS_CONTEXT_HMAC_SECRET`，并由可信网关签发短期访问上下文；不要把 tenant、role 或 group 放进用户请求正文当作授权依据。
 
-- `OPENAI_API_BASE`、`OPENAI_API_KEY` 和模型名；
-- BGE-M3 / Reranker 的本地路径或 Hugging Face 模型 ID；
-- Compose 对应的 Milvus、MongoDB、Neo4j、MinIO 连接信息。
-
-项目里给的 RAG 参数是我根据第三章实践先放进去的一组起点，不是放之四海而皆准的最优值。建议拿自己的验证集和 bad case 继续调：
-
-| 参数 | 默认值 |
-| --- | ---: |
-| Chunk 最大 / 最小字符 | 1200 / 300 |
-| Chunk overlap | 约 1 句 |
-| RRF k / 候选数 | 60 / 20 |
-| Rerank 动态范围 | 6–15 |
-| 断崖阈值 | 绝对 0.5 / 相对 25% |
-| 低分拒答阈值 | 0.3 |
+所有检索、融合、校准、拒答、Web、预算和安全参数集中在 `knowledge/processor/query_process/config.py`，通过环境变量覆盖；模型价格集中在 `config/model_pricing.json`，不硬编码在节点逻辑中。
 
 ### 4. 启动应用
 
@@ -147,114 +145,103 @@ Copy-Item knowledge\.env.example knowledge\.env
 python -m knowledge.main
 ```
 
-也可以直接使用 Uvicorn：
-
-```powershell
-uvicorn knowledge.main:app --host 0.0.0.0 --port 8000
-```
-
-启动后可以打开：
+可访问：
 
 - 问答工作台：<http://127.0.0.1:8000/chat.html>
 - 知识导入：<http://127.0.0.1:8000/import.html>
 - OpenAPI：<http://127.0.0.1:8000/docs>
-- 服务健康：<http://127.0.0.1:8000/health>
+- 健康检查：<http://127.0.0.1:8000/health>
 - 能力状态：<http://127.0.0.1:8000/api/system>
 
-根路径 `/` 会跳转到问答页。
-
-## API
+## API 与诊断
 
 | Method | Path | 说明 |
 | --- | --- | --- |
 | POST | `/upload` | 上传 PDF / Markdown，返回任务 ID |
-| GET | `/status/{task_id}` | 查看导入或问答任务状态 |
+| GET | `/status/{task_id}` | 查询导入或问答任务状态 |
 | POST | `/query` | 同步或流式问答 |
-| GET | `/stream/{task_id}` | SSE 进度、Token 与最终结果 |
-| GET | `/history/{session_id}` | 查看最近会话记录 |
-| DELETE | `/history/{session_id}` | 清空会话 |
+| GET | `/stream/{task_id}` | SSE 进度与最终结果 |
+| GET | `/history/{session_id}` | 查询当前授权主体的会话历史 |
+| DELETE | `/history/{session_id}` | 清空当前授权主体的会话历史 |
 | GET | `/health` | Liveness |
-| GET | `/api/system` | 不含密钥的能力/配置概览 |
+| GET | `/api/system` | 不含密钥的能力与配置概览 |
 
-非流式问答会返回证据和诊断信息，前端会据此展示引用卡片和检索轨迹：
+回答会返回结构化 `sources`、`images` 和 `diagnostics`。retrieval trace 保存每一路候选、融合与重排变化、过滤原因、拒答特征和最终证据，但不保存完整 Prompt、密钥或未经截断的敏感内容。
 
-```json
-{
-  "answer": "测量前先确认量程与表笔接口。[1]",
-  "image_urls": [],
-  "sources": [
-    {
-      "index": 1,
-      "source": "local",
-      "file_title": "设备使用手册",
-      "title": "电压测量",
-      "chunk_id": "1024",
-      "score": 0.91,
-      "preview": "……"
-    }
-  ],
-  "diagnostics": {
-    "trace_id": "task-id",
-    "retrieval_counts": {"embedding": 10, "hyde": 10, "rerank": 6},
-    "node_timings": {"rerank_node": 0.42},
-    "total_time": 2.73
-  }
-}
+## 测试与真实评测
+
+```powershell
+.\knowledge\.venv\Scripts\python.exe -m unittest discover -s tests -v
+.\knowledge\.venv\Scripts\python.exe -m compileall -q -x "\.venv|import_temp_Dir|__pycache__" knowledge tests scripts
+.\knowledge\.venv\Scripts\python.exe scripts\run_evaluation.py --provider contract --output evaluation\results\contract.json
 ```
+
+契约评测不产生外部费用，也不声称测得真实召回率。真实门禁需要连接模型、Milvus、Neo4j、MongoDB 和 Web，并使用版本化 source contract、control baseline 与 `evaluation/gate.json`。数据集、历史报告和门禁纪律见 [evaluation/README.md](evaluation/README.md)。
+
+## 发布与回滚
+
+运行时回滚由 `config/releases/stage2-industrial-rag-v2.json` 管理。它只切换四个白名单键：chunk collection、index version、entity collection 和 graph version；不会修改密钥或其他环境配置。
+
+先做 dry-run：
+
+```powershell
+.\knowledge\.venv\Scripts\python.exe scripts\switch_rag_release.py --target rollback
+```
+
+确认差异后应用：
+
+```powershell
+.\knowledge\.venv\Scripts\python.exe scripts\switch_rag_release.py --target rollback --apply
+.\knowledge\.venv\Scripts\python.exe scripts\verify_stage2_index.py `
+  --collection kb_chunks_ir_stage2_release_control_20260925 `
+  --entity-collection kb_graph_entities_stage2_release_20260925 `
+  --graph-version stage2-acl-kg-release-20260925 `
+  --tenant-id public --item-name "HAK 180" --expected-chunks 129
+```
+
+恢复 candidate：
+
+```powershell
+.\knowledge\.venv\Scripts\python.exe scripts\switch_rag_release.py --target candidate --apply
+```
+
+每次应用前都会生成被 Git 忽略的 `knowledge/.env.bak.<UTC 时间>`，写入使用同目录原子替换。若当前环境不属于 manifest 中的任一已知版本，脚本默认拒绝切换；`--force` 只应在人工核对后使用。
+
+代码版本使用两个带注释标签：
+
+- `stage1-document-ir-v1.0.0`：阶段 2 之前的恢复点；
+- `stage2-industrial-rag-v2.0.0`：本次阶段 2 发布点。
+
+合并后如需撤销，应先切换到 ACL-compatible rollback 索引，再对主分支的阶段 2 合并提交执行 `git revert`。不要对共享主分支使用 `git reset --hard`。需要调查旧版本时，可从标签创建独立恢复分支：`git switch -c recovery/stage1 stage1-document-ir-v1.0.0`。
 
 ## 项目结构
 
 ```text
+config/                         # 费率与发布清单
+docs/roadmap/                   # 阶段状态、ADR、验证证据
+evaluation/                     # 数据集、source contract、门禁与基线
 knowledge/
-├── api/                 # 上传、查询、系统接口
-├── core/                # 应用配置、依赖与路径
-├── front/               # 零构建依赖的 Knowledge Studio
-├── processor/
-│   ├── import_process/  # 文档导入 LangGraph
-│   └── query_process/   # 多路检索 LangGraph
-├── schema/              # Pydantic API 模型
-├── service/             # 应用服务层
-└── utils/               # Milvus / Mongo / MinIO / LLM / SSE
+├── api/                        # 上传、查询、系统接口
+├── document_ir/                # 结构化文档、血缘与结构差异
+├── evaluation/                 # 指标、usage 与评测运行器
+├── observability/              # Token、延迟、费用与定价
+├── processor/import_process/   # 导入 LangGraph
+├── processor/query_process/    # 工业级查询 LangGraph
+├── security/                   # 签名主体与 ACL
+├── service/                    # 应用服务层
+└── utils/                      # 存储、模型与输出工具
+scripts/                        # 建索引、验收、评测和回滚工具
+tests/                          # 单元与集成回归
 ```
 
-更详细的设计取舍，以及第三章经验在代码中的对应位置，见 [docs/architecture.md](docs/architecture.md)。
+## 安全与边界
 
-## 我是怎么验证的
-
-```powershell
-python -m unittest discover -s tests -v
-python -m compileall -q -x "\\.venv|import_temp_Dir|__pycache__" knowledge tests scripts
-python scripts/run_evaluation.py --provider contract --baseline evaluation/baselines/stage0-contract.core.json
-```
-
-最后一条命令运行无外部费用的契约门禁，但不声称测到了召回率。连接真实模型、
-Milvus、Neo4j、MongoDB 和 Web MCP 的完整评测默认执行 `python scripts/run_evaluation.py`；
-数据版本纪律与阶段 0 基线状态见
-[`evaluation/README.md`](evaluation/README.md)。
-
-GitHub Actions 也会执行同类的轻量单元测试和语法检查，但不会连接真实模型或外部数据库。完整的 MinerU、模型、Milvus、Neo4j、MongoDB 和 MinIO 链路，需要在自己的环境里再跑一遍。
-
-## 安全提示
-
-- `knowledge/.env` 只用于本机，并且已经被 `.gitignore` 排除；
-- 如果旧密钥曾进入 Git 历史或发给过别人，请立即轮换，单纯删除文件是不够的；
-- 上传接口默认只允许 PDF / Markdown，并限制文件大小；
-- 文档内容是不可信输入，回答 Prompt 明确禁止执行资料中的提示注入指令；
-- 生产环境还需要补上认证、RBAC、限流、审计，以及 HTML/Markdown 白名单净化。
-
-## 当前边界与 Roadmap
-
-当前版本更适合单机 Demo、学习和二次开发。任务状态与 SSE 通道还是进程内存实现，所以建议用单 Worker 运行。正式部署前，我还会继续补下面这些部分：
-
-- Redis + Celery/RQ/Dramatiq 的持久任务、重试、取消与多副本 Pub/Sub；
-- `document_id + sha256 + version + staging/active/retired` 两阶段发布；
-- Milvus、Neo4j、MinIO 与商品名索引的一致删除和回滚；
-- 文档列表、版本管理、重建索引与知识图谱可视化；
-- RAGAS 数据集和 faithfulness / context precision / recall 回归；
-- Prometheus、OpenTelemetry Trace、P95/P99 与 TTFT 监控。
-
-这里不写未经实测的召回率、QPS 或用户规模。质量和性能数字应该由具体数据集及部署环境测出来。
+- `knowledge/.env`、自动备份和运行日志均被 Git 忽略；真实密钥不得提交。
+- 签名访问令牌严格校验格式、HMAC、受众和过期时间，并拒绝非规范 Base64URL 别名。
+- 文档和 Web 内容都视为不可信输入；间接 Prompt Injection 会在进入 rerank / answer context 前隔离，输出再经过 DLP。
+- 当前安全回归不等于覆盖所有未知攻击。生产环境仍需要网关认证、速率限制、密钥轮换、集中审计和持续监控。
+- Web 与生成模型存在长期漂移；费率变化也会使旧成本报告失效。阶段 3 应继续建设灰度、在线 SLO、告警和自动回滚。
 
 ## License
 
-本项目采用 [MIT License](LICENSE)。第三方模型、数据集和基础设施镜像仍受各自许可证与服务条款约束。
+本项目采用 [MIT License](LICENSE)。第三方模型、数据集、归档容器镜像和基础设施仍受各自许可证与服务条款约束。

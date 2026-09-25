@@ -34,7 +34,14 @@ jobs:
             "pydantic>=2.9,<3" \
             "python-dotenv>=1,<2" \
             "python-multipart>=0.0.12,<1" \
-            "httpx>=0.27,<1"
+            "httpx>=0.27,<1" \
+            "pymilvus[model]>=2.5,<4" \
+            "minio>=7.2,<8" \
+            "neo4j>=5.20,<7" \
+            "pymongo>=4.8,<5" \
+            "langgraph>=1.0,<2" \
+            "langchain-core>=1.0,<2" \
+            "langchain-openai>=1.0,<2"
 
       - name: Compile project sources
         run: python -m compileall -q -x "\.venv|import_temp_Dir|__pycache__" knowledge tests scripts
@@ -43,7 +50,7 @@ jobs:
         run: python -m unittest discover -s tests -v
 
       - name: Run deterministic contract gate
-        run: python scripts/run_evaluation.py --provider contract --baseline evaluation/baselines/stage0-contract.core.json --output evaluation/results/ci.json
+        run: python scripts/run_evaluation.py --provider contract --output evaluation/results/ci.json
 
       - name: Upload evaluation report
         if: always()

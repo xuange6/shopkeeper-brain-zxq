@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Tuple
 
 from knowledge.processor.query_process.base import BaseNode
+from knowledge.processor.query_process.evidence import canonical_evidence_id
 from knowledge.processor.query_process.state import QueryGraphState
 
 
@@ -17,8 +18,8 @@ class RrfNode(BaseNode):
         kg_chunks = state.get("kg_chunks") or []
 
         search_resources = {
-            "embedding": (self._normalize_chunks(embedding_chunks), 1.0),
-            "hyde": (self._normalize_chunks(hyde_embedding_chunks), 1.0),
+            "embedding": (self._normalize_chunks(embedding_chunks), self.config.rrf_direct_weight),
+            "hyde": (self._normalize_chunks(hyde_embedding_chunks), self.config.rrf_hyde_weight),
             "kg": (self._normalize_chunks(kg_chunks), self.config.rrf_kg_weight),
         }
 
@@ -59,6 +60,12 @@ class RrfNode(BaseNode):
                     chunk.setdefault("retrieval_score", retrieval_score)
             else:
                 chunk = dict(raw_chunk)
+
+            # Stage-1 collections carry a stable application ID even when an
+            # existing stage-0 Milvus collection still exposes an auto ID.
+            if chunk.get("stable_id"):
+                chunk["storage_chunk_id"] = chunk.get("chunk_id")
+                chunk["chunk_id"] = chunk["stable_id"]
 
             if RrfNode._get_chunk_id(chunk):
                 normalized_chunks.append(chunk)
@@ -117,13 +124,14 @@ class RrfNode(BaseNode):
             chunk["rrf_score"] = chunk_scores[chunk_id]
             chunk["rrf_sources"] = chunk_sources.get(chunk_id, [])
             chunk["rrf_ranks"] = chunk_ranks.get(chunk_id, {})
+            chunk["evidence_group_id"] = canonical_evidence_id(chunk)
             results.append(chunk)
 
         return results
 
     @staticmethod
     def _get_chunk_id(doc: Dict[str, Any]) -> str:
-        chunk_id = doc.get("chunk_id") or doc.get("id")
+        chunk_id = doc.get("stable_id") or doc.get("chunk_id") or doc.get("id")
         return str(chunk_id).strip() if chunk_id is not None else ""
 
     @staticmethod

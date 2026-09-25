@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "provider": "aliyun-bailian",
+  "region": "cn-beijing",
+  "currency": "CNY",
+  "billing_unit": "per_1m_tokens",
+  "effective_date": "2026-09-24",
+  "observed_at": "2026-09-24",
+  "source": "https://help.aliyun.com/zh/model-studio/qwen-flash",
+  "models": {
+    "qwen-flash": {
+      "snapshot": "qwen-flash-2025-07-28",
+      "tiers": [
+        {"max_input_tokens": 128000, "input": 0.15, "output": 1.5},
+        {"max_input_tokens": 256000, "input": 0.6, "output": 6.0},
+        {"max_input_tokens": 1000000, "input": 1.2, "output": 12.0}
+      ]
+    }
+  }
+}

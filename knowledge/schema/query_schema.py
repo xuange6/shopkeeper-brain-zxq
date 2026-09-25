@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class QueryRequest(BaseModel):
+    # Identity and ACL claims are intentionally absent. They are supplied by a
+    # verified server-side dependency, never trusted from the JSON body.
+    model_config = ConfigDict(extra="forbid")
+
     query: str = Field(..., min_length=1, max_length=4000, description="用户查询内容")
     session_id: Optional[str] = Field(
         None,
@@ -32,8 +36,32 @@ class SourceReference(BaseModel):
     file_title: str = ""
     parent_title: str = ""
     chunk_id: str = ""
+    document_id: str = ""
+    revision_id: str = ""
+    source_uri: str = ""
+    section_id: str = ""
+    page_numbers: List[int] = Field(default_factory=list)
+    page_uids: List[str] = Field(default_factory=list)
+    block_ids: List[str] = Field(default_factory=list)
+    block_lineage_ids: List[str] = Field(default_factory=list)
+    title_path: List[str] = Field(default_factory=list)
+    locations: List[Dict[str, object]] = Field(default_factory=list)
+    image_urls: List[str] = Field(default_factory=list)
     url: str = ""
     score: Optional[float] = None
+    rerank_raw_score: Optional[float] = None
+    calibrated_relevance: Optional[float] = None
+    ranking_score: Optional[float] = None
+    answer_confidence: Optional[float] = None
+    authority: Optional[float] = None
+    freshness: Optional[float] = None
+    source_type: str = ""
+    domain: str = ""
+    retrieved_at: str = ""
+    retrieved_date: str = ""
+    publication_date: str = ""
+    supported_claims: List[str] = Field(default_factory=list)
+    evidence_group_id: str = ""
     preview: str = ""
 
 
@@ -45,6 +73,16 @@ class QueryDiagnostics(BaseModel):
     node_timings: Dict[str, float] = Field(default_factory=dict)
     total_time: Optional[float] = None
     model_usage: Dict[str, object] = Field(default_factory=dict)
+    policy_decision: Dict[str, object] = Field(default_factory=dict)
+    context_security: Dict[str, object] = Field(default_factory=dict)
+    output_security: Dict[str, object] = Field(default_factory=dict)
+    access_control: Dict[str, object] = Field(default_factory=dict)
+    web_search: Dict[str, object] = Field(default_factory=dict)
+    retrieval_plan: Dict[str, object] = Field(default_factory=dict)
+    evidence_decision: Dict[str, object] = Field(default_factory=dict)
+    constraint_completion: Dict[str, object] = Field(default_factory=dict)
+    citation_verification: Dict[str, object] = Field(default_factory=dict)
+    resource_breakdown: Dict[str, object] = Field(default_factory=dict)
 
 
 class QueryResponse(BaseModel):

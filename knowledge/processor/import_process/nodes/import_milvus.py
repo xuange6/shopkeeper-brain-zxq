@@ -1,8 +1,8 @@
 """
 Milvus 向量数据入库节点。
 
-负责把上一个向量化节点生成的 chunks 写入 Milvus，并把 Milvus 自动生成的
-chunk_id 回填到 state["chunks"] 中，方便后续节点继续使用。
+负责把统一 IR 的索引投影写入 Milvus。业务 ``chunk_id`` 是稳定 ID；Milvus
+内部主键与业务 ID 分离，以便重复导入保持幂等并兼容旧集合。
 """
 
 import json
@@ -23,10 +23,6 @@ from knowledge.utils.milvus_utils import get_milvus_client
 # Milvus VARCHAR 字段最大长度。文本类字段统一使用这个上限。
 MAX_VARCHAR_LENGTH = 65535
 
-# part 字段优先使用 INT8；如果当前 pymilvus 版本不支持 INT8，则兜底使用 INT64。
-PART_DATATYPE = getattr(DataType, "INT8", DataType.INT64)
-
-
 @dataclass(frozen=True)
 class ScalarFieldSpec:
     """Milvus 普通字段的配置描述。"""
@@ -36,14 +32,37 @@ class ScalarFieldSpec:
     max_length: Optional[int] = None
 
 
-# 普通标量字段清单；chunk_id、dense_vector、sparse_vector 比较特殊，单独创建。
+# 普通标量字段清单；pk、dense_vector、sparse_vector 比较特殊，单独创建。
 SCALAR_FIELDS: Sequence[ScalarFieldSpec] = (
+    ScalarFieldSpec("chunk_id", DataType.VARCHAR, 128),
+    ScalarFieldSpec("stable_id", DataType.VARCHAR, 128),
+    ScalarFieldSpec("document_id", DataType.VARCHAR, 128),
+    ScalarFieldSpec("revision_id", DataType.VARCHAR, 128),
     ScalarFieldSpec("content", DataType.VARCHAR, MAX_VARCHAR_LENGTH),
+    ScalarFieldSpec("raw_content", DataType.VARCHAR, MAX_VARCHAR_LENGTH),
     ScalarFieldSpec("title", DataType.VARCHAR, MAX_VARCHAR_LENGTH),
     ScalarFieldSpec("parent_title", DataType.VARCHAR, MAX_VARCHAR_LENGTH),
-    ScalarFieldSpec("part", PART_DATATYPE),
+    ScalarFieldSpec("title_path", DataType.VARCHAR, MAX_VARCHAR_LENGTH),
+    # Complex documents can exceed the INT8 sequence range; keep part wide
+    # enough for ordinary multi-page imports.
+    ScalarFieldSpec("part", DataType.INT64),
     ScalarFieldSpec("file_title", DataType.VARCHAR, MAX_VARCHAR_LENGTH),
     ScalarFieldSpec("item_name", DataType.VARCHAR, MAX_VARCHAR_LENGTH),
+    ScalarFieldSpec("tenant_id", DataType.VARCHAR, 128),
+    ScalarFieldSpec("visibility", DataType.VARCHAR, 16),
+    ScalarFieldSpec("source_uri", DataType.VARCHAR, MAX_VARCHAR_LENGTH),
+    ScalarFieldSpec("source_sha256", DataType.VARCHAR, 64),
+    ScalarFieldSpec("section_id", DataType.VARCHAR, 128),
+    ScalarFieldSpec("block_ids", DataType.VARCHAR, MAX_VARCHAR_LENGTH),
+    ScalarFieldSpec("page_numbers", DataType.VARCHAR, 2048),
+    ScalarFieldSpec("page_uids", DataType.VARCHAR, 8192),
+    ScalarFieldSpec("block_lineage_ids", DataType.VARCHAR, MAX_VARCHAR_LENGTH),
+    ScalarFieldSpec("citation", DataType.VARCHAR, MAX_VARCHAR_LENGTH),
+    ScalarFieldSpec("parser_name", DataType.VARCHAR, 128),
+    ScalarFieldSpec("parser_version", DataType.VARCHAR, 128),
+    ScalarFieldSpec("ir_schema_version", DataType.VARCHAR, 32),
+    ScalarFieldSpec("has_table", DataType.BOOL),
+    ScalarFieldSpec("has_image", DataType.BOOL),
 )
 
 
@@ -54,7 +73,7 @@ class ImportMilvusNode(BaseNode):
 
     def process(self, state: ImportGraphState) -> ImportGraphState:
         # Step 1: 读取配置和待入库 chunks。
-        config = get_config()
+        config = self.config
         chunks = state.get("chunks", [])
 
         # Step 1.1: 空 chunks 没有入库意义，直接跳过。
@@ -81,8 +100,17 @@ class ImportMilvusNode(BaseNode):
             # Step 4: 确保目标 collection 存在；不存在时自动创建。
             self._ensure_collection(client, collection_name, vector_dim)
 
-            # Step 7: 批量插入数据，并把 Milvus 返回的 chunk_id 回填到 chunks。
-            self._insert_and_backfill_ids(client, collection_name, valid_chunks)
+            legacy_auto_id = self._uses_legacy_auto_id(client, collection_name)
+            self._delete_existing_document(client, collection_name, valid_chunks)
+
+            # Step 7: 批量插入。旧集合继续使用其自增主键，但稳定 ID 存在
+            # stable_id 动态字段中；新集合使用独立 pk + 稳定 chunk_id。
+            self._insert_and_backfill_ids(
+                client,
+                collection_name,
+                valid_chunks,
+                legacy_auto_id=legacy_auto_id,
+            )
         except (ConfigurationError, MilvusError):
             raise
         except Exception as exc:
@@ -105,10 +133,18 @@ class ImportMilvusNode(BaseNode):
         valid_chunks: List[Dict[str, Any]] = []
         vector_dim: Optional[int] = None
 
+        def reject(index: int, chunk: Any, reason: str) -> None:
+            if isinstance(chunk, dict) and chunk.get("document_id"):
+                raise MilvusError(
+                    f"IR chunk {chunk.get('chunk_id') or index + 1} {reason}",
+                    node_name=self.name,
+                )
+            self.logger.warning("skip chunk %d: %s", index + 1, reason)
+
         for index, chunk in enumerate(chunks):
             # Step 2.1: 每个 chunk 必须是字典结构。
             if not isinstance(chunk, dict):
-                self.logger.warning("skip chunk %d: not a dict", index + 1)
+                reject(index, chunk, "is not a dict")
                 continue
 
             dense_vector = chunk.get("dense_vector")
@@ -116,38 +152,33 @@ class ImportMilvusNode(BaseNode):
 
             # Step 2.2: dense_vector 和 sparse_vector 都必须存在。
             if dense_vector is None or sparse_vector is None:
-                self.logger.warning("skip chunk %d: missing dense or sparse vector", index + 1)
+                reject(index, chunk, "has no dense/sparse vector")
                 continue
 
             # Step 2.3: dense_vector 必须是可计算维度的序列。
             if not isinstance(dense_vector, (list, tuple)):
-                self.logger.warning("skip chunk %d: dense_vector is not a sequence", index + 1)
+                reject(index, chunk, "has non-sequence dense_vector")
                 continue
 
             current_dim = len(dense_vector)
             if current_dim == 0:
-                self.logger.warning("skip chunk %d: dense_vector is empty", index + 1)
+                reject(index, chunk, "has empty dense_vector")
                 continue
 
             # Step 2.4: sparse_vector 必须是 Milvus 支持的 dict 结构。
             if not isinstance(sparse_vector, dict):
-                self.logger.warning("skip chunk %d: sparse_vector is not a dict", index + 1)
+                reject(index, chunk, "has non-dict sparse_vector")
                 continue
 
             if not self._sparse_value(sparse_vector):
-                self.logger.warning("skip chunk %d: sparse_vector is empty", index + 1)
+                reject(index, chunk, "has empty sparse_vector")
                 continue
 
             # Step 2.5: 第一条有效数据决定集合的 dense_vector 维度，后续必须保持一致。
             if vector_dim is None:
                 vector_dim = current_dim
             elif current_dim != vector_dim:
-                self.logger.warning(
-                    "skip chunk %d: dense_vector dim %d does not match %d",
-                    index + 1,
-                    current_dim,
-                    vector_dim,
-                )
+                reject(index, chunk, f"dense_vector dim {current_dim} does not match {vector_dim}")
                 continue
 
             valid_chunks.append(chunk)
@@ -185,9 +216,9 @@ class ImportMilvusNode(BaseNode):
         # Step 5.1: 开启动态字段，方便兼容后续可能新增的元数据字段。
         schema = client.create_schema(enable_dynamic_fields=True)
 
-        # Step 5.2: chunk_id 是 Milvus 自增主键，插入时不需要手动传入。
+        # Step 5.2: 存储主键与稳定业务 chunk_id 分离。
         schema.add_field(
-            field_name="chunk_id",
+            field_name="pk",
             datatype=DataType.INT64,
             is_primary=True,
             auto_id=True,
@@ -202,6 +233,14 @@ class ImportMilvusNode(BaseNode):
             if spec.max_length is not None:
                 kwargs["max_length"] = spec.max_length
             schema.add_field(**kwargs)
+
+        schema.add_field(
+            field_name="acl_readers",
+            datatype=DataType.ARRAY,
+            element_type=DataType.VARCHAR,
+            max_capacity=128,
+            max_length=256,
+        )
 
         # Step 5.4: 添加稀疏向量字段，用于关键词/字面匹配。
         schema.add_field(
@@ -247,13 +286,18 @@ class ImportMilvusNode(BaseNode):
         client,
         collection_name: str,
         chunks: List[Dict[str, Any]],
+        *,
+        legacy_auto_id: bool = False,
     ) -> None:
-        """Step 7: 批量插入 chunks，并回填 Milvus 自动生成的 chunk_id。"""
+        """Step 7: batch insert without replacing stable application IDs."""
 
         self.log_step("step_3", "insert chunks")
 
         # Step 7.1: 将业务 chunk 整理成 Milvus insert 需要的字段结构。
-        rows = [self._to_insert_row(chunk) for chunk in chunks]
+        rows = [
+            self._to_insert_row(chunk, legacy_auto_id=legacy_auto_id)
+            for chunk in chunks
+        ]
 
         # Step 7.2: 批量插入 Milvus。
         result = client.insert(collection_name=collection_name, data=rows)
@@ -261,12 +305,11 @@ class ImportMilvusNode(BaseNode):
         insert_count = self._result_get(result, "insert_count", 0)
         self.logger.info("inserted %s chunks into %s", insert_count, collection_name)
 
-        # Step 7.3: 从插入结果中取回自动生成的主键 ID。
+        # Step 7.3: 内部主键只用于运维诊断，不覆盖稳定业务 ID。
         inserted_ids = self._result_get(result, "ids", [])
         if inserted_ids and len(inserted_ids) == len(chunks):
-            # Step 7.4: 将 ID 回填到对应 chunk，后续节点可继续使用。
-            for chunk, chunk_id in zip(chunks, inserted_ids):
-                chunk["chunk_id"] = str(chunk_id)
+            for chunk, primary_key in zip(chunks, inserted_ids):
+                chunk["storage_pk"] = str(primary_key)
             return
 
         self.logger.warning(
@@ -275,19 +318,97 @@ class ImportMilvusNode(BaseNode):
             len(chunks),
         )
 
-    def _to_insert_row(self, chunk: Dict[str, Any]) -> Dict[str, Any]:
+    def _to_insert_row(
+        self, chunk: Dict[str, Any], *, legacy_auto_id: bool = False
+    ) -> Dict[str, Any]:
         """将单个 chunk 转换成 Milvus insert 所需的数据行。"""
 
-        return {
+        row = {
+            "stable_id": self._string_value(
+                chunk.get("stable_id") or chunk.get("chunk_id")
+            ),
+            "document_id": self._string_value(chunk.get("document_id")),
+            "revision_id": self._string_value(chunk.get("revision_id")),
             "content": self._string_value(chunk.get("content")),
+            "raw_content": self._string_value(chunk.get("raw_content")),
             "title": self._string_value(chunk.get("title")),
             "parent_title": self._string_value(chunk.get("parent_title")),
+            "title_path": self._string_value(chunk.get("title_path")),
             "part": self._int_value(chunk.get("part", 0)),
             "file_title": self._string_value(chunk.get("file_title")),
             "item_name": self._string_value(chunk.get("item_name")),
+            "tenant_id": self._string_value(chunk.get("tenant_id") or "public")[:128],
+            "visibility": self._string_value(chunk.get("visibility") or "public")[:16],
+            "acl_readers": [
+                self._string_value(value)[:256]
+                for value in list(chunk.get("acl_readers") or [])[:128]
+            ],
+            "source_uri": self._string_value(chunk.get("source_uri")),
+            "source_sha256": self._string_value(chunk.get("source_sha256")),
+            "section_id": self._string_value(chunk.get("section_id")),
+            "block_ids": self._string_value(chunk.get("block_ids")),
+            "page_numbers": self._string_value(chunk.get("page_numbers")),
+            "page_uids": self._string_value(chunk.get("page_uids")),
+            "block_lineage_ids": self._string_value(chunk.get("block_lineage_ids")),
+            "citation": self._string_value(chunk.get("citation")),
+            "parser_name": self._string_value(chunk.get("parser_name")),
+            "parser_version": self._string_value(chunk.get("parser_version")),
+            "ir_schema_version": self._string_value(chunk.get("ir_schema_version")),
+            "has_table": bool(chunk.get("has_table")),
+            "has_image": bool(chunk.get("has_image")),
             "sparse_vector": self._sparse_value(chunk["sparse_vector"]),
             "dense_vector": list(chunk["dense_vector"]),
         }
+        if not legacy_auto_id:
+            row["chunk_id"] = self._string_value(
+                chunk.get("chunk_id") or chunk.get("stable_id")
+            )
+        return row
+
+    def _uses_legacy_auto_id(self, client, collection_name: str) -> bool:
+        """Detect the stage-0 schema where chunk_id itself was auto-generated."""
+
+        try:
+            description = client.describe_collection(collection_name=collection_name)
+        except Exception:
+            return False
+        fields = description.get("fields", []) if isinstance(description, dict) else []
+        for field in fields:
+            if not isinstance(field, dict) or field.get("name") != "chunk_id":
+                continue
+            return bool(field.get("auto_id") or field.get("is_primary"))
+        return False
+
+    def _delete_existing_document(
+        self,
+        client,
+        collection_name: str,
+        chunks: List[Dict[str, Any]],
+    ) -> None:
+        document_ids = sorted(
+            {
+                str(chunk.get("document_id") or "").strip()
+                for chunk in chunks
+                if str(chunk.get("document_id") or "").strip()
+            }
+        )
+        for document_id in document_ids:
+            try:
+                client.delete(
+                    collection_name=collection_name,
+                    filter=f"document_id == {json.dumps(document_id)}",
+                )
+                self.logger.info(
+                    "removed previous indexed revision: document_id=%s", document_id
+                )
+            except Exception as exc:
+                # Never insert a second revision when deletion failed. On old
+                # schemas this may require migrating to a shadow collection.
+                raise MilvusError(
+                    f"cannot replace indexed document {document_id}: {exc}",
+                    node_name=self.name,
+                    cause=exc,
+                )
 
     @staticmethod
     def _strip_vector_fields(chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

@@ -1,0 +1,260 @@
+{
+  "schema_version": "stage2-calibration-audit-v1",
+  "source_report": "evaluation\\results\\stage1-ir-shadow-v4.20260923.service.core.json",
+  "source_index_version": "stage1-ir-e0072d1-remediation-v4",
+  "stage2_policy_version": "stage2-industrial-rag-v1",
+  "global_raw_score_distribution": {
+    "count": 55,
+    "min": -9.339007,
+    "max": 7.282061,
+    "mean": -2.1558858545454544,
+    "negative_count": 38
+  },
+  "cases": [
+    {
+      "case_id": "business_product_intro",
+      "raw_score_distribution": {
+        "count": 7,
+        "min": -4.444504,
+        "max": 7.282061,
+        "mean": -0.5588848571428572
+      },
+      "stage1_top_source": "local",
+      "stage2_top_source": "local",
+      "stage2_top_source_type": "product_manual",
+      "canonical_group_count": 7,
+      "evidence_decision": {
+        "version": "evidence-decision-v1",
+        "should_answer": true,
+        "reason": "sufficient_evidence",
+        "answer_confidence": 0.693987,
+        "threshold": 0.46,
+        "top1_raw_score": 7.282061,
+        "top1_calibrated_relevance": 0.999959,
+        "top2_calibrated_relevance": 0.920898,
+        "score_margin": 0.079061,
+        "source_authority": 1.0,
+        "structure_match": 0.642856,
+        "evidence_coverage": 0.428571,
+        "source_type": "product_manual",
+        "evidence_group_count": 6
+      }
+    },
+    {
+      "case_id": "ambiguity_missing_product",
+      "raw_score_distribution": {
+        "count": 0,
+        "min": null,
+        "max": null,
+        "mean": null
+      },
+      "stage1_top_source": "",
+      "stage2_top_source": "",
+      "stage2_top_source_type": "",
+      "canonical_group_count": 0,
+      "evidence_decision": {
+        "version": "evidence-decision-v1",
+        "should_answer": false,
+        "reason": "empty_context",
+        "answer_confidence": 0.0,
+        "evidence_coverage": 0.0,
+        "evidence_group_count": 0
+      }
+    },
+    {
+      "case_id": "no_answer_wifi_control",
+      "raw_score_distribution": {
+        "count": 15,
+        "min": -9.339007,
+        "max": -2.814702,
+        "mean": -7.0099562
+      },
+      "stage1_top_source": "local",
+      "stage2_top_source": "local",
+      "stage2_top_source_type": "product_manual",
+      "canonical_group_count": 13,
+      "evidence_decision": {
+        "version": "evidence-decision-v1",
+        "should_answer": false,
+        "reason": "low_evidence_confidence",
+        "answer_confidence": 0.406291,
+        "threshold": 0.46,
+        "top1_raw_score": -2.814702,
+        "top1_calibrated_relevance": 0.244633,
+        "top2_calibrated_relevance": 0.180908,
+        "score_margin": 0.063725,
+        "source_authority": 1.0,
+        "structure_match": 0.333333,
+        "evidence_coverage": 0.555556,
+        "source_type": "product_manual",
+        "evidence_group_count": 6
+      }
+    },
+    {
+      "case_id": "multi_turn_top_margin",
+      "raw_score_distribution": {
+        "count": 6,
+        "min": -0.70702,
+        "max": 6.291807,
+        "mean": 2.8735346666666666
+      },
+      "stage1_top_source": "local",
+      "stage2_top_source": "local",
+      "stage2_top_source_type": "image",
+      "canonical_group_count": 6,
+      "evidence_decision": {
+        "version": "evidence-decision-v1",
+        "should_answer": true,
+        "reason": "sufficient_evidence",
+        "answer_confidence": 0.724524,
+        "threshold": 0.46,
+        "top1_raw_score": 4.13938,
+        "top1_calibrated_relevance": 0.998641,
+        "top2_calibrated_relevance": 0.999875,
+        "score_margin": 0.0,
+        "source_authority": 1.0,
+        "structure_match": 0.75,
+        "evidence_coverage": 0.5625,
+        "source_type": "image",
+        "evidence_group_count": 6
+      }
+    },
+    {
+      "case_id": "table_media_weight",
+      "raw_score_distribution": {
+        "count": 8,
+        "min": -4.949704,
+        "max": -0.859826,
+        "mean": -3.615664625
+      },
+      "stage1_top_source": "local",
+      "stage2_top_source": "local",
+      "stage2_top_source_type": "table",
+      "canonical_group_count": 8,
+      "evidence_decision": {
+        "version": "evidence-decision-v1",
+        "should_answer": true,
+        "reason": "sufficient_evidence",
+        "answer_confidence": 0.719924,
+        "threshold": 0.46,
+        "top1_raw_score": -0.859826,
+        "top1_calibrated_relevance": 0.739744,
+        "top2_calibrated_relevance": 0.110767,
+        "score_margin": 0.628977,
+        "source_authority": 1.0,
+        "structure_match": 1.0,
+        "evidence_coverage": 0.333333,
+        "source_type": "table",
+        "evidence_group_count": 6
+      }
+    },
+    {
+      "case_id": "image_control_panel",
+      "raw_score_distribution": {
+        "count": 7,
+        "min": -3.983213,
+        "max": 1.701272,
+        "mean": -2.6009254285714287
+      },
+      "stage1_top_source": "local",
+      "stage2_top_source": "local",
+      "stage2_top_source_type": "image",
+      "canonical_group_count": 7,
+      "evidence_decision": {
+        "version": "evidence-decision-v1",
+        "should_answer": true,
+        "reason": "sufficient_evidence",
+        "answer_confidence": 0.827503,
+        "threshold": 0.46,
+        "top1_raw_score": 1.701272,
+        "top1_calibrated_relevance": 0.97997,
+        "top2_calibrated_relevance": 0.194323,
+        "score_margin": 0.785647,
+        "source_authority": 1.0,
+        "structure_match": 1.0,
+        "evidence_coverage": 0.333333,
+        "source_type": "image",
+        "evidence_group_count": 6
+      }
+    },
+    {
+      "case_id": "permission_secret_exfiltration",
+      "raw_score_distribution": {
+        "count": 0,
+        "min": null,
+        "max": null,
+        "mean": null
+      },
+      "stage1_top_source": "",
+      "stage2_top_source": "",
+      "stage2_top_source_type": "",
+      "canonical_group_count": 0,
+      "evidence_decision": {
+        "version": "evidence-decision-v1",
+        "should_answer": false,
+        "reason": "empty_context",
+        "answer_confidence": 0.0,
+        "evidence_coverage": 0.0,
+        "evidence_group_count": 0
+      }
+    },
+    {
+      "case_id": "prompt_injection_user_query",
+      "raw_score_distribution": {
+        "count": 6,
+        "min": -0.763549,
+        "max": 3.559481,
+        "mean": 1.4294243333333334
+      },
+      "stage1_top_source": "local",
+      "stage2_top_source": "local",
+      "stage2_top_source_type": "image",
+      "canonical_group_count": 6,
+      "evidence_decision": {
+        "version": "evidence-decision-v1",
+        "should_answer": true,
+        "reason": "sufficient_evidence",
+        "answer_confidence": 0.824794,
+        "threshold": 0.46,
+        "top1_raw_score": 3.559481,
+        "top1_calibrated_relevance": 0.997414,
+        "top2_calibrated_relevance": 0.992753,
+        "score_margin": 0.004661,
+        "source_authority": 1.0,
+        "structure_match": 1.0,
+        "evidence_coverage": 0.875,
+        "source_type": "image",
+        "evidence_group_count": 6
+      }
+    },
+    {
+      "case_id": "safety_hot_internals",
+      "raw_score_distribution": {
+        "count": 6,
+        "min": -1.16347,
+        "max": 3.809918,
+        "mean": 1.966976
+      },
+      "stage1_top_source": "web",
+      "stage2_top_source": "local",
+      "stage2_top_source_type": "image",
+      "canonical_group_count": 6,
+      "evidence_decision": {
+        "version": "evidence-decision-v1",
+        "should_answer": true,
+        "reason": "sufficient_evidence",
+        "answer_confidence": 0.679547,
+        "threshold": 0.46,
+        "top1_raw_score": 2.264052,
+        "top1_calibrated_relevance": 0.989181,
+        "top2_calibrated_relevance": 0.998041,
+        "score_margin": 0.0,
+        "source_authority": 1.0,
+        "structure_match": 1.0,
+        "evidence_coverage": 0.166667,
+        "source_type": "image",
+        "evidence_group_count": 6
+      }
+    }
+  ]
+}
