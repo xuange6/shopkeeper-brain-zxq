@@ -1,0 +1,31 @@
+# Copy to terraform.tfvars (ignored by Git) and replace every value after
+# confirming actual availability in the ACK console for your account.
+region_id    = "cn-shanghai"
+cluster_name = "shopkeeper-brain-production"
+
+# Do not guess zone IDs. Choose three zones shown as available by ACK.
+availability_zones = [
+  "replace-with-zone-a",
+  "replace-with-zone-b",
+  "replace-with-zone-c",
+]
+
+# Pick at least two types that are available in all three selected zones.
+worker_instance_types = [
+  "replace-with-primary-ecs-instance-type",
+  "replace-with-fallback-ecs-instance-type",
+]
+
+# Create the key pair outside Terraform; never commit the private key.
+ecs_key_pair_name = "replace-with-existing-ecs-key-pair"
+
+node_pool_min_size = 3
+node_pool_max_size = 12
+
+tags = {
+  Environment = "production"
+  ManagedBy   = "terraform"
+  Project     = "shopkeeper-brain"
+  Owner       = "replace-with-owner"
+  CostCenter  = "replace-with-cost-center"
+}

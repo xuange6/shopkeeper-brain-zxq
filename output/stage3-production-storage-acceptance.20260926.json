@@ -1,0 +1,25 @@
+{
+  "status": "passed",
+  "acl": {
+    "chunks": {
+      "visibility": "private",
+      "acl_readers": [
+        "group:support"
+      ]
+    },
+    "entities": {
+      "visibility": "private",
+      "acl_readers": [
+        "group:support"
+      ]
+    }
+  },
+  "deletion_state": "completed",
+  "verified_targets": {
+    "chunks": true,
+    "milvus": true,
+    "neo4j": true,
+    "objects": true
+  },
+  "validated_at": "2026-09-26"
+}

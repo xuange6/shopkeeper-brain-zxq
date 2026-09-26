@@ -1,0 +1,33 @@
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: keda
+  namespace: kube-system
+spec:
+  chart: keda
+  repo: https://kedacore.github.io/charts
+  version: 2.21.0
+  targetNamespace: keda
+  createNamespace: true
+  failurePolicy: abort
+  valuesContent: |-
+    image:
+      pullPolicy: IfNotPresent
+    operator:
+      replicaCount: 2
+    metricsServer:
+      replicaCount: 2
+    webhooks:
+      replicaCount: 2
+    podDisruptionBudget:
+      operator:
+        minAvailable: 1
+      metricServer:
+        minAvailable: 1
+      webhooks:
+        minAvailable: 1
+    logging:
+      operator:
+        format: json
+      webhooks:
+        format: json

@@ -1,7 +1,7 @@
 import json
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from langgraph.graph import END, START, StateGraph
 
@@ -17,6 +17,7 @@ from knowledge.processor.import_process.nodes.item_name_recognition_load import 
 from knowledge.processor.import_process.nodes.kg_graph_node import KnowledgeGraphNode
 from knowledge.processor.import_process.nodes.pdf_to_md_node import PdfToMdNode
 from knowledge.processor.import_process.state import ImportGraphState, create_default_state
+from knowledge.processor.import_process.config import ImportConfig
 
 
 TRUTHY_VALUES = {"1", "true", "yes", "on"}
@@ -136,20 +137,20 @@ def knowledge_graph_router(state: ImportGraphState):
     return END
 
 
-def create_import_graph():
+def create_import_graph(config: ImportConfig | None = None):
     graph_pipeline = StateGraph(ImportGraphState)  # type: ignore[arg-type]
 
     nodes = {
-        "entry_node": EntryNode(),
-        "pdf_to_md_node": PdfToMdNode(),
-        "document_parse_node": DocumentParseNode(),
-        "document_normalize_node": DocumentNormalizeNode(),
-        "document_split_node": DocumentSplitNode(),
-        "document_enrich_node": DocumentEnrichNode(),
-        "item_name_recognition_node": ItemNameRecognitionNode(),
-        "bge_embedding_node": BgeEmbeddingNode(),
-        "import_milvus_node": ImportMilvusNode(),
-        "knowledge_graph_node": KnowledgeGraphNode(),
+        "entry_node": EntryNode(config),
+        "pdf_to_md_node": PdfToMdNode(config),
+        "document_parse_node": DocumentParseNode(config),
+        "document_normalize_node": DocumentNormalizeNode(config),
+        "document_split_node": DocumentSplitNode(config),
+        "document_enrich_node": DocumentEnrichNode(config),
+        "item_name_recognition_node": ItemNameRecognitionNode(config),
+        "bge_embedding_node": BgeEmbeddingNode(config),
+        "import_milvus_node": ImportMilvusNode(config),
+        "knowledge_graph_node": KnowledgeGraphNode(config),
     }
     for name, node in nodes.items():
         graph_pipeline.add_node(name, node)
@@ -193,6 +194,11 @@ def run_import_graph(
     task_id: str = "",
     logical_document_key: str = "",
     previous_ir_path: str = "",
+    config: ImportConfig | None = None,
+    tenant_id: str = "public",
+    visibility: str = "public",
+    acl_readers: list[str] | None = None,
+    cancelled: Callable[[], bool] | None = None,
 ):
     init_state = create_default_state(
         task_id=task_id,
@@ -200,10 +206,22 @@ def run_import_graph(
         file_dir=file_dir,
         logical_document_key=logical_document_key,
         previous_ir_path=previous_ir_path,
+        tenant_id=tenant_id,
+        visibility=visibility,
+        acl_readers=list(acl_readers or []),
+        graph_version=(config.kg_graph_version if config else ""),
     )
     final_state = None
 
-    for event in graph_app.stream(init_state):
+    app = graph_app if config is None else create_import_graph(config)
+    events = iter(app.stream(init_state))
+    while True:
+        if cancelled and cancelled():
+            raise InterruptedError("import task cancellation requested")
+        try:
+            event = next(events)
+        except StopIteration:
+            break
         for node_name, node_state in event.items():
             print(
                 f"{node_name} summary: "

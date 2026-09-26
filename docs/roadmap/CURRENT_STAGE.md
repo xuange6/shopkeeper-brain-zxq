@@ -1,56 +1,85 @@
-# 当前阶段
+# 当前阶段：阶段 3 已完成本地验收，等待目标生产环境验收
 
-## 阶段 2：Completed / PASS
+> 最后更新：2026-09-27
 
-执行文件：`sessions/02-industrial-rag.md`
+## 先说结论
 
-阶段 2 的遗留缺口属于阶段 2 自身验收范围，现已在阶段 2 内完成修复和复验。2026-09-25 使用当前代码、真实 Milvus/Neo4j/Web/模型服务及原 `evaluation/gate.json`，完成 12 个用例、每例 3 次的 control/candidate 对照；candidate 为 12/12，核心用例为 9/9，gate PASS，允许阶段 2 毕业。阶段 3 尚未开始。
+阶段 3「企业知识生命周期」的核心开发已经完成，代码、真实基础设施适配、本地生产形态和故障恢复演练均已通过。项目现在不是“还在开发阶段 3”，而是已经走到 **目标生产环境上线验收** 这一步。
 
-阶段 0、阶段 1 和阶段 2 早期的基线、快照、FAIL 报告及索引均保留。旧报告只代表其生成时的代码和环境，不被改写为当前结果。
+这句话也有明确边界：我们已经证明这套方案能运行、能恢复、能以分布式方式部署，但还没有在企业最终使用的多可用区 Kubernetes 和正式数据上完成签字验收。因此当前状态是：
 
-## 最终验收结果
+- **阶段 3 实现：PASS**
+- **本地生产形态验收：PASS**
+- **目标生产环境验收：待执行**
+- **正式生产上线：尚未批准**
 
-- 自动化测试：发布前最终完整运行 230/230 PASS。
-- control：12/12；candidate：12/12；两组核心用例均为 9/9；执行次数均为 36，运行错误为 0。
-- candidate 的 Recall@5、evidence-group/section/document Recall@5 均为 0.944444；引用正确率、Faithfulness、图片正确率、行为准确率和安全均为 1.0。
-- KG 不再是空通道：正式集 `knowledge_graph_recall@5=0.111111`；发布前专用真实探针召回 20 个 KG evidence，且每个探针 evidence 都有 document/section/chunk 血缘及 `knowledge_graph` 来源类型。
-- candidate P50 2989.878 ms，P95 5918.720 ms；相对同轮 control 的 6072.658 ms，P95 降低 2.53%，满足最大增加 25% 的门禁。
-- control 为 80,482 tokens、CNY 0.02296815；candidate 为 80,275 tokens、CNY 0.02272920，分别降低 0.26% 和 1.04%。`cost_status=available`，真实 CNY 批次预算通过。
-- 费率指纹：`dff7920ae0a2f1374786cb4e00169c25ed772923f8c493952fe3af7f348eab24`；发布代码 query pipeline 指纹：`56fdc795661541578271caf3a370eb12b4822d5a0a16597e9f1242f81718b07c`。
-- 当前激活集合为 `kb_chunks_ir_stage2_release_20260925`；实体集合为 `kb_graph_entities_stage2_release_20260925`；图版本为 `stage2-acl-kg-release-20260925`。ACL-compatible rollback 集合为 `kb_chunks_ir_stage2_release_control_20260925`。
+阶段 4A 可以并行开始，但不能把它理解成阶段 3 已经在生产环境上线。
 
-## 已关闭的阶段 2 缺口
+## 这次真正完成了什么
 
-- 可信 principal/tenant/ACL 由服务端签名上下文提供，请求正文不能自报身份；direct、HyDE、实体对齐、Neo4j 扩展和 chunk 回填均在召回前过滤。
-- KG schema、版本、约束、实体集合和图数据已重建并实测；KG 回填保留完整 citation lineage。
-- 表格负 reranker 原始分不再直接触发拒答；拒答由校准相关性、分差、authority、结构命中和覆盖率共同决定。
-- 本地产品/安全资料优先，Web 只按时效意图或本地证据不足路由；普通网页不能证明产品能力，官方域名、日期、漂移和失败可观测。
-- 引用按 claim 绑定并在输出前核验；公开 source 只声明自己实际支持的 claims。
-- 权限窃取、Prompt Injection、正常业务、知识不足、实体歧义和时效查询走独立策略；注入中的合法业务部分在清洗后继续回答。
-- chunk、canonical evidence-group、section 和 document 指标并存，结构变化通过 dataset-SHA 固定的精确 source contract 审计，不通过复制 chunk 提分。
-- 发布清单和原子切换脚本已经真实完成 candidate → rollback → candidate 往返；每次应用前备份 `.env`，且只允许修改四个索引/图谱白名单键。
+阶段 3 不再只是单进程、单机数据库里的生命周期原型。当前实现已经具备完整的企业知识变更链路：来源同步、文档版本、ACL 传播、发布候选、原子激活、回滚、删除、对账、重试、死信、审计和指标都进入了同一套可恢复流程。
 
-## 保留风险
+控制面已经支持 PostgreSQL，多 worker 通过数据库队列领取任务，并保证同一个 source 不会被两个 worker 同时处理。scheduler 使用数据库锁进行主节点竞争；API 的跨 Pod 任务状态和 SSE 事件使用 Redis 保存。查询侧每次请求都会读取当前 active Release，不依赖某台机器上的本地指针文件。
 
-- Web 与生成模型仍是外部动态依赖；三次实验降低了偶然性，但不能消除长期漂移，阶段 3 应纳入发布监控和回滚。
-- 当前确定性安全边界经过对抗回归，但不声称覆盖所有未知攻击；专用 guard model 可作为后续 shadow 信号，不能替代确定性授权。
-- 费率配置有来源和生效日期；供应商、区域或模型价格变化时必须更新配置并生成新指纹。
-- 当前正式数据集中只有一个用例产生可匹配的 KG Top-5 命中；已增加独立真实 KG 探针，后续应扩充版本化 KG golden set，但这不再是空图或空通道问题。
+生产数据面也不再停留在 mock：Milvus、Neo4j 和 MinIO 的 ACL 更新、删除与反查已经跑过真实适配器。失败任务可以从 checkpoint 恢复，超过预算后进入 DLQ，也可以由人工安全 replay。
 
-## 最终证据
+部署方面同时准备了两条路径：
 
-- `docs/roadmap/STAGE2_ARCHITECTURE_ADR.md`
-- `docs/roadmap/STAGE2_VALIDATION_20260925.md`
-- `evaluation/results/stage2-acl-v2-release-control.20260925.service.full.json`
-- `evaluation/results/stage2-acl-v2-release-candidate.20260925.service.full.json`
-- `evaluation/results/stage2-acl-v2-release-kg-lineage-probe.20260925.service.json`
-- `evaluation/baselines/stage2-industrial-rag-v2.0.0.20260925.service.full.json`
-- `evaluation/source_contracts/stage2-ir-v4.json`
-- `output/stage2-acl-release.index-audit.20260925.json`
-- `output/stage2-acl-release-candidate.index-verification.20260925.json`
-- `output/stage2-acl-release-control.index-verification.20260925.json`
-- `config/releases/stage2-industrial-rag-v2.json`
+1. 面向企业生产的 Kubernetes/Kustomize 与 ACK Pro 三可用区方案，包含 HPA、KEDA、PDB、拓扑分散、NetworkPolicy、受限容器权限和外部 Secret 契约。
+2. 不产生云账单的三虚拟机 K3s 验收环境，用来真实验证 embedded-etcd、多控制面、KEDA 和单节点故障恢复。
 
-## 下一步
+## 已经拿到的验收结果
 
-阶段 2 已毕业，阶段 3 可作为新的独立阶段启动；不得把阶段 2 的历史 FAIL 报告删除或回写为 PASS。
+- 完整自动化测试：**280/280 PASS**，另有 66 个子测试通过。
+- 生命周期基础设施故障演练：**15/15 PASS**。
+- PostgreSQL 17 迁移、双 worker 并发领取、同 source 排他：PASS。
+- PostgreSQL scheduler 单 leader 与释放后接管：PASS。
+- Redis 跨进程任务状态和可重放 SSE：PASS。
+- Milvus、Neo4j、MinIO 的 ACL 和删除传播：PASS。
+- 阶段 2 冻结回归：12/12、核心 9/9，质量和成本 gate：PASS。
+- 三虚拟机 K3s：3 个 control-plane/etcd 节点全部 Ready。
+- KEDA operator、metrics apiserver、admission webhooks：全部 2/2 Available。
+- 停止一个 K3s 控制面后，API 继续返回 ready，etcd 保持多数派，KEDA 每类服务至少保留一个可用副本；节点恢复后全部回到 2/2。
+
+主要证据：
+
+- `docs/roadmap/STAGE3_VALIDATION_20260925.md`
+- `output/stage3-lifecycle-acceptance.20260926t064537z.json`
+- `output/stage3-postgres-acceptance.20260926.json`
+- `output/stage3-production-storage-acceptance.20260926.json`
+- `output/stage3-distributed-runtime-acceptance.20260926.json`
+- `output/stage3-postgres-distributed-acceptance.20260926.json`
+- `output/stage3-k3s-vagrant-ha.20260926.json`
+
+## 为什么还不能写“生产验收完成”
+
+目前的三节点 K3s 集群运行在同一台 Windows 宿主机上的三台虚拟机里。它证明了 Kubernetes、etcd 和 KEDA 的行为是正确的，但三台 VM 仍共享电源、磁盘和物理网络，所以只有一个物理故障域，不能替代多主机或多可用区生产集群。
+
+此外，Kubernetes 生产清单已经完成并能正确渲染，但业务应用尚未部署到企业最终集群。完整应用镜像此前也因为 Docker Hub 鉴权端点连接超时而没有取得构建成功证据。正式环境中的 Ingress/TLS、企业 SSO、CSI/PVC、External Secrets、托管数据库切换和企业 Secret Manager 仍需要现场验证。
+
+最后，正式晋级必须使用目标企业数据重新执行 evaluation gate。旧的阶段 2 报告可以作为回归基线，但不能代替目标环境的新报告。
+
+## 生产验收还需要完成的五件事
+
+1. 准备三台独立主机或多可用区托管 Kubernetes，并接入正式域名、证书和入口网络。
+2. 接入正式 HA PostgreSQL、Redis、Milvus、Neo4j、MongoDB、对象存储和 Secret Manager。
+3. 在目标构建环境完成应用镜像构建、扫描、按摘要发布，并部署 production overlay。
+4. 执行 node/AZ 驱逐、KEDA 扩缩、数据库与存储故障切换、滚动发布和回滚演练。
+5. 使用企业真实数据运行三次完整 evaluation gate，达到 12/12、核心 9/9，并通过质量、安全、延迟和成本门禁。
+
+## 当前决策
+
+阶段 3 的实现和本地验收可以正式收口，历史失败报告继续保留，不覆盖、不删除。团队可以并行进入阶段 4A，但生产发布必须等上述目标环境验收全部通过后再批准。
+
+阶段 2 继续作为冻结基线，不再回写；SQLite 仅保留给本地开发和单元测试，不作为多节点生产方案。
+
+## 相关文档
+
+- `docs/roadmap/STAGE3_ARCHITECTURE_ADR.md`
+- `docs/roadmap/STAGE3_RUNBOOK.md`
+- `docs/roadmap/STAGE3_MIGRATION_AND_ROLLBACK.md`
+- `docs/roadmap/STAGE3_VALIDATION_20260925.md`
+- `docs/PRODUCTION_DEPLOYMENT.md`
+- `docs/DISTRIBUTED_PRODUCTION_DEPLOYMENT.md`
+- `deploy/k3s-ha/README.md`
+- `deploy/k3s-vagrant/README.md`

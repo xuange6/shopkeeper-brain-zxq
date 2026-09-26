@@ -1,0 +1,1216 @@
+{
+  "schema_version": "stage3-acceptance-v1",
+  "generated_at": "2026-09-26T06:47:18.789835+00:00",
+  "status": "PASS",
+  "dependencies": {
+    "milvus": {
+      "uri": "http://127.0.0.1:19530",
+      "collection": "kb_stage3_acceptance_20260926t064537z",
+      "ok": true
+    },
+    "neo4j": {
+      "uri": "bolt://127.0.0.1:7687",
+      "namespace": "20260926t064537z",
+      "ok": true
+    },
+    "minio": {
+      "endpoint": "127.0.0.1:9000",
+      "bucket": "a-bucket",
+      "namespace": "stage3-acceptance/20260926t064537z",
+      "ok": true
+    },
+    "mongodb": {
+      "uri": "mongodb://127.0.0.1:27017",
+      "ok": true
+    }
+  },
+  "slo_observed": {
+    "acl_revocation_seconds": 11.118290662765503,
+    "worker_recovery_seconds": 1.361379,
+    "rollback_seconds": 0.034343
+  },
+  "drills": [
+    {
+      "number": 1,
+      "name": "repeat source sync",
+      "initial_state": {
+        "documents": 0
+      },
+      "fault_injection": "run two full snapshots",
+      "state_transitions": [
+        {
+          "entity": "sync_run",
+          "from": "",
+          "to": "pending",
+          "actor": "scheduler"
+        },
+        {
+          "entity": "sync_run",
+          "from": "pending",
+          "to": "running",
+          "actor": "worker"
+        },
+        {
+          "entity": "document_revision",
+          "from": "",
+          "to": "discovered",
+          "actor": "sync"
+        },
+        {
+          "entity": "lifecycle_task",
+          "from": "",
+          "to": "pending",
+          "actor": "scheduler"
+        },
+        {
+          "entity": "sync_run",
+          "from": "running",
+          "to": "succeeded",
+          "actor": "worker"
+        },
+        {
+          "entity": "sync_run",
+          "from": "",
+          "to": "pending",
+          "actor": "scheduler"
+        },
+        {
+          "entity": "sync_run",
+          "from": "pending",
+          "to": "running",
+          "actor": "worker"
+        },
+        {
+          "entity": "sync_run",
+          "from": "running",
+          "to": "succeeded",
+          "actor": "worker"
+        }
+      ],
+      "recovery": [
+        {
+          "run_id": "run_7084c7a3571e47c46b02f27c8b71891f",
+          "source_id": "acceptance-source",
+          "idempotency_key": "sync-1",
+          "trigger_type": "manual",
+          "cursor_before": "",
+          "cursor_after": "05a192edb920142580b39755662f06460c025a6cee4a326c1de0e66a32c93703",
+          "discovered_count": 1,
+          "created_count": 1,
+          "updated_count": 0,
+          "deleted_count": 0,
+          "unchanged_count": 0,
+          "current_state": "succeeded",
+          "retry_count": 0,
+          "lease_owner": null,
+          "lease_expires_at": null,
+          "heartbeat_at": 1790405138.0588107,
+          "checkpoint_json": "{\"external_id\":\"guide.md\",\"position\":1}",
+          "error_category": null,
+          "error_message": "",
+          "started_at": 1790405138.0182486,
+          "finished_at": 1790405138.069585,
+          "created_at": 1790405138.0045028
+        },
+        {
+          "run_id": "run_ba7617e4e93fb41e06164ef99b44ad31",
+          "source_id": "acceptance-source",
+          "idempotency_key": "sync-2",
+          "trigger_type": "manual",
+          "cursor_before": "05a192edb920142580b39755662f06460c025a6cee4a326c1de0e66a32c93703",
+          "cursor_after": "05a192edb920142580b39755662f06460c025a6cee4a326c1de0e66a32c93703",
+          "discovered_count": 1,
+          "created_count": 0,
+          "updated_count": 0,
+          "deleted_count": 0,
+          "unchanged_count": 1,
+          "current_state": "succeeded",
+          "retry_count": 0,
+          "lease_owner": null,
+          "lease_expires_at": null,
+          "heartbeat_at": 1790405138.1128438,
+          "checkpoint_json": "{\"external_id\":\"guide.md\",\"position\":1}",
+          "error_category": null,
+          "error_message": "",
+          "started_at": 1790405138.096538,
+          "finished_at": 1790405138.1230795,
+          "created_at": 1790405138.0827892
+        }
+      ],
+      "final_data_check": true,
+      "query_validation": null,
+      "metrics": {
+        "source_sync_total": 2.0,
+        "source_sync_failure_total": 0.0,
+        "task_queue_depth": 1.0,
+        "oldest_task_age": 0.09396123886108398,
+        "retry_total": 0.0,
+        "dead_letter_total": 0.0,
+        "documents_discovered": 1.0,
+        "documents_updated": 0.0,
+        "documents_deleted": 0.0,
+        "staging_validation_failure_total": 0.0,
+        "release_activation_total": 0.0,
+        "release_rollback_total": 0.0,
+        "orphan_record_count": 0.0,
+        "active_release_health": 0.0,
+        "source_sync_duration": 0.03893899917602539,
+        "source_sync_lag": 0.017802715301513672,
+        "revision_processing_duration": 0.0,
+        "acl_sync_lag": 0.0,
+        "deletion_propagation_lag": 0.0,
+        "connector_rate_limit_total": 0.0,
+        "connector_error_total": 0.0
+      },
+      "audit_event_ids": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "duration_seconds": 0.139446,
+      "error": "",
+      "status": "PASS"
+    },
+    {
+      "number": 2,
+      "name": "duplicate event delivery",
+      "initial_state": {
+        "run_id": "run_7084c7a3571e47c46b02f27c8b71891f"
+      },
+      "fault_injection": "redeliver sync-1",
+      "state_transitions": [],
+      "recovery": {
+        "run_id": "run_7084c7a3571e47c46b02f27c8b71891f",
+        "source_id": "acceptance-source",
+        "idempotency_key": "sync-1",
+        "trigger_type": "manual",
+        "cursor_before": "",
+        "cursor_after": "05a192edb920142580b39755662f06460c025a6cee4a326c1de0e66a32c93703",
+        "discovered_count": 1,
+        "created_count": 1,
+        "updated_count": 0,
+        "deleted_count": 0,
+        "unchanged_count": 0,
+        "current_state": "succeeded",
+        "retry_count": 0,
+        "lease_owner": null,
+        "lease_expires_at": null,
+        "heartbeat_at": 1790405138.0588107,
+        "checkpoint_json": "{\"external_id\":\"guide.md\",\"position\":1}",
+        "error_category": null,
+        "error_message": "",
+        "started_at": 1790405138.0182486,
+        "finished_at": 1790405138.069585,
+        "created_at": 1790405138.0045028
+      },
+      "final_data_check": true,
+      "query_validation": null,
+      "metrics": {
+        "source_sync_total": 2.0,
+        "source_sync_failure_total": 0.0,
+        "task_queue_depth": 1.0,
+        "oldest_task_age": 0.11333560943603516,
+        "retry_total": 0.0,
+        "dead_letter_total": 0.0,
+        "documents_discovered": 1.0,
+        "documents_updated": 0.0,
+        "documents_deleted": 0.0,
+        "staging_validation_failure_total": 0.0,
+        "release_activation_total": 0.0,
+        "release_rollback_total": 0.0,
+        "orphan_record_count": 0.0,
+        "active_release_health": 0.0,
+        "source_sync_duration": 0.03893899917602539,
+        "source_sync_lag": 0.037177085876464844,
+        "revision_processing_duration": 0.0,
+        "acl_sync_lag": 0.0,
+        "deletion_propagation_lag": 0.0,
+        "connector_rate_limit_total": 0.0,
+        "connector_error_total": 0.0
+      },
+      "audit_event_ids": [],
+      "duration_seconds": 0.019353,
+      "error": "",
+      "status": "PASS"
+    },
+    {
+      "number": 3,
+      "name": "content update active isolation",
+      "initial_state": {
+        "active_revision": "rev_12ac6edddb4eedab8b0e01182a9cf37f"
+      },
+      "fault_injection": "change file content",
+      "state_transitions": [
+        {
+          "entity": "sync_run",
+          "from": "",
+          "to": "pending",
+          "actor": "scheduler"
+        },
+        {
+          "entity": "sync_run",
+          "from": "pending",
+          "to": "running",
+          "actor": "worker"
+        },
+        {
+          "entity": "document_revision",
+          "from": "",
+          "to": "discovered",
+          "actor": "sync"
+        },
+        {
+          "entity": "lifecycle_task",
+          "from": "",
+          "to": "pending",
+          "actor": "scheduler"
+        },
+        {
+          "entity": "sync_run",
+          "from": "running",
+          "to": "succeeded",
+          "actor": "worker"
+        }
+      ],
+      "recovery": {
+        "run_id": "run_c47b11e061cb4ae61a26b96eede7bf2b",
+        "source_id": "acceptance-source",
+        "idempotency_key": "sync-content",
+        "trigger_type": "manual",
+        "cursor_before": "05a192edb920142580b39755662f06460c025a6cee4a326c1de0e66a32c93703",
+        "cursor_after": "eb62b167f2b9f296a5a9461f8a16ba04151b16e2a6c9b096216d2e2bb4a37629",
+        "discovered_count": 1,
+        "created_count": 0,
+        "updated_count": 1,
+        "deleted_count": 0,
+        "unchanged_count": 0,
+        "current_state": "succeeded",
+        "retry_count": 0,
+        "lease_owner": null,
+        "lease_expires_at": null,
+        "heartbeat_at": 1790405142.5795505,
+        "checkpoint_json": "{\"external_id\":\"guide.md\",\"position\":1}",
+        "error_category": null,
+        "error_message": "",
+        "started_at": 1790405142.5241683,
+        "finished_at": 1790405142.5936208,
+        "created_at": 1790405142.5050566
+      },
+      "final_data_check": true,
+      "query_validation": {
+        "active_revision": "rev_12ac6edddb4eedab8b0e01182a9cf37f"
+      },
+      "metrics": {
+        "source_sync_total": 3.0,
+        "source_sync_failure_total": 0.0,
+        "task_queue_depth": 2.0,
+        "oldest_task_age": 4.569619655609131,
+        "retry_total": 0.0,
+        "dead_letter_total": 0.0,
+        "documents_discovered": 1.0,
+        "documents_updated": 1.0,
+        "documents_deleted": 0.0,
+        "staging_validation_failure_total": 0.0,
+        "release_activation_total": 0.0,
+        "release_rollback_total": 0.0,
+        "orphan_record_count": 0.0,
+        "active_release_health": 0.0,
+        "source_sync_duration": 0.04911017417907715,
+        "source_sync_lag": 0.022919893264770508,
+        "revision_processing_duration": 0.17622637748718262,
+        "acl_sync_lag": 0.0,
+        "deletion_propagation_lag": 0.0,
+        "connector_rate_limit_total": 0.0,
+        "connector_error_total": 0.0
+      },
+      "audit_event_ids": [
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "duration_seconds": 0.119185,
+      "error": "",
+      "status": "PASS"
+    },
+    {
+      "number": 4,
+      "name": "ACL-only update",
+      "initial_state": {
+        "parser_tasks": 2
+      },
+      "fault_injection": "grant group:support without content change",
+      "state_transitions": [
+        {
+          "entity": "sync_run",
+          "from": "",
+          "to": "pending",
+          "actor": "scheduler"
+        },
+        {
+          "entity": "sync_run",
+          "from": "pending",
+          "to": "running",
+          "actor": "worker"
+        },
+        {
+          "entity": "document_revision",
+          "from": "",
+          "to": "discovered",
+          "actor": "sync"
+        },
+        {
+          "entity": "document_revision",
+          "from": "discovered",
+          "to": "staged",
+          "actor": "sync"
+        },
+        {
+          "entity": "lifecycle_task",
+          "from": "",
+          "to": "pending",
+          "actor": "scheduler"
+        },
+        {
+          "entity": "sync_run",
+          "from": "running",
+          "to": "succeeded",
+          "actor": "worker"
+        }
+      ],
+      "recovery": {
+        "run_id": "run_c62f2859f768b20fc4338614932695dc",
+        "source_id": "acceptance-source",
+        "idempotency_key": "sync-acl",
+        "trigger_type": "manual",
+        "cursor_before": "eb62b167f2b9f296a5a9461f8a16ba04151b16e2a6c9b096216d2e2bb4a37629",
+        "cursor_after": "82d806466aa222068580fdebcd903ad03e11d0495fe2d5ccc1b140ce0bc82879",
+        "discovered_count": 1,
+        "created_count": 0,
+        "updated_count": 1,
+        "deleted_count": 0,
+        "unchanged_count": 0,
+        "current_state": "succeeded",
+        "retry_count": 0,
+        "lease_owner": null,
+        "lease_expires_at": null,
+        "heartbeat_at": 1790405150.8652618,
+        "checkpoint_json": "{\"external_id\":\"guide.md\",\"position\":1}",
+        "error_category": null,
+        "error_message": "",
+        "started_at": 1790405150.7741742,
+        "finished_at": 1790405150.8771338,
+        "created_at": 1790405150.7568905
+      },
+      "final_data_check": true,
+      "query_validation": null,
+      "metrics": {
+        "source_sync_total": 4.0,
+        "source_sync_failure_total": 0.0,
+        "task_queue_depth": 3.0,
+        "oldest_task_age": 12.856555938720703,
+        "retry_total": 0.0,
+        "dead_letter_total": 0.0,
+        "documents_discovered": 1.0,
+        "documents_updated": 2.0,
+        "documents_deleted": 0.0,
+        "staging_validation_failure_total": 0.0,
+        "release_activation_total": 0.0,
+        "release_rollback_total": 0.0,
+        "orphan_record_count": 0.0,
+        "active_release_health": 0.0,
+        "source_sync_duration": 0.06257253885269165,
+        "source_sync_lag": 0.026343107223510742,
+        "revision_processing_duration": 0.1578894853591919,
+        "acl_sync_lag": 0.0,
+        "deletion_propagation_lag": 0.0,
+        "connector_rate_limit_total": 0.0,
+        "connector_error_total": 0.0
+      },
+      "audit_event_ids": [
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32
+      ],
+      "duration_seconds": 0.153027,
+      "error": "",
+      "status": "PASS"
+    },
+    {
+      "number": 5,
+      "name": "staging failure isolation",
+      "initial_state": {
+        "active": "acceptance-base"
+      },
+      "fault_injection": "fail Neo4j lineage validation",
+      "state_transitions": [
+        {
+          "entity": "index_release",
+          "from": "validating",
+          "to": "failed",
+          "actor": "validator"
+        }
+      ],
+      "recovery": {
+        "release_id": "acceptance-bad",
+        "source_revisions_json": "[]",
+        "chunk_collection": "kb_stage3_acceptance_20260926t064537z_bad",
+        "entity_collection": "entities-bad",
+        "graph_version": "20260926t064537z-bad",
+        "object_asset_namespace": "stage3-acceptance/20260926t064537z/bad",
+        "schema_version": "knowledge-release-v1",
+        "evaluation_report": "",
+        "manifest_json": "{\"chunk_collection\":\"kb_stage3_acceptance_20260926t064537z_bad\",\"entity_collection\":\"entities-bad\",\"evaluation_report\":\"\",\"graph_version\":\"20260926t064537z-bad\",\"object_asset_namespace\":\"stage3-acceptance/20260926t064537z/bad\",\"release_id\":\"acceptance-bad\",\"schema_version\":\"knowledge-release-v1\",\"source_revisions\":[]}",
+        "manifest_hash": "311d0eccc87c28bef44ae8b5e76e60df2b3bebd471613238432dcaef8ff5e435",
+        "current_state": "failed",
+        "previous_release_id": "acceptance-base",
+        "activated_at": null,
+        "rolled_back_at": null,
+        "created_at": 1790405151.0102575,
+        "updated_at": 1790405151.065252
+      },
+      "final_data_check": true,
+      "query_validation": {
+        "CHUNKS_COLLECTION": "kb_stage3_acceptance_20260926t064537z",
+        "ENTITY_NAME_COLLECTION": "entities-base",
+        "KG_GRAPH_VERSION": "20260926t064537z",
+        "OBJECT_ASSET_NAMESPACE": "stage3-acceptance/20260926t064537z",
+        "manifest_hash": "a1d3854f81eff2216a7aa86b419f71a3e62b151a30fa36aec9107a488aa325cc",
+        "release_id": "acceptance-base"
+      },
+      "metrics": {
+        "source_sync_total": 4.0,
+        "source_sync_failure_total": 0.0,
+        "task_queue_depth": 3.0,
+        "oldest_task_age": 13.04505467414856,
+        "retry_total": 0.0,
+        "dead_letter_total": 0.0,
+        "documents_discovered": 1.0,
+        "documents_updated": 2.0,
+        "documents_deleted": 0.0,
+        "staging_validation_failure_total": 1.0,
+        "release_activation_total": 1.0,
+        "release_rollback_total": 0.0,
+        "orphan_record_count": 0.0,
+        "active_release_health": 1.0,
+        "source_sync_duration": 0.06257253885269165,
+        "source_sync_lag": 0.2148418426513672,
+        "revision_processing_duration": 4.309569358825684,
+        "acl_sync_lag": 0.0,
+        "deletion_propagation_lag": 0.0,
+        "connector_rate_limit_total": 0.0,
+        "connector_error_total": 0.0
+      },
+      "audit_event_ids": [
+        42
+      ],
+      "duration_seconds": 0.035941,
+      "error": "",
+      "status": "PASS"
+    },
+    {
+      "number": 6,
+      "name": "worker termination recovery",
+      "initial_state": {
+        "task": "task_ca3243b9413484850d3453a4dfa2d730"
+      },
+      "fault_injection": "child worker exits with code 23 after checkpoint",
+      "state_transitions": [
+        {
+          "entity": "lifecycle_task",
+          "from": "pending",
+          "to": "running",
+          "actor": "worker"
+        },
+        {
+          "entity": "lifecycle_task",
+          "from": "running",
+          "to": "retrying",
+          "actor": "reaper"
+        },
+        {
+          "entity": "lifecycle_task",
+          "from": "retrying",
+          "to": "running",
+          "actor": "worker"
+        },
+        {
+          "entity": "lifecycle_task",
+          "from": "running",
+          "to": "succeeded",
+          "actor": "worker"
+        }
+      ],
+      "recovery": {
+        "exit_code": 23,
+        "recovered": [
+          "task_ca3243b9413484850d3453a4dfa2d730"
+        ],
+        "checkpoint": {
+          "page": 3
+        }
+      },
+      "final_data_check": true,
+      "query_validation": null,
+      "metrics": {
+        "source_sync_total": 4.0,
+        "source_sync_failure_total": 0.0,
+        "task_queue_depth": 3.0,
+        "oldest_task_age": 14.422271490097046,
+        "retry_total": 1.0,
+        "dead_letter_total": 0.0,
+        "documents_discovered": 1.0,
+        "documents_updated": 2.0,
+        "documents_deleted": 0.0,
+        "staging_validation_failure_total": 1.0,
+        "release_activation_total": 1.0,
+        "release_rollback_total": 0.0,
+        "orphan_record_count": 0.0,
+        "active_release_health": 1.0,
+        "source_sync_duration": 0.06257253885269165,
+        "source_sync_lag": 1.5920586585998535,
+        "revision_processing_duration": 4.309569358825684,
+        "acl_sync_lag": 0.0,
+        "deletion_propagation_lag": 0.0,
+        "connector_rate_limit_total": 0.0,
+        "connector_error_total": 0.0
+      },
+      "audit_event_ids": [
+        44,
+        45,
+        46,
+        47
+      ],
+      "duration_seconds": 1.361379,
+      "error": "",
+      "status": "PASS"
+    },
+    {
+      "number": 7,
+      "name": "Milvus temporary outage",
+      "initial_state": {
+        "task": "task_2e9c5299466a7c80056c8ac0137a4816"
+      },
+      "fault_injection": "connect to closed port then retry real Milvus",
+      "state_transitions": [
+        {
+          "entity": "lifecycle_task",
+          "from": "pending",
+          "to": "running",
+          "actor": "worker"
+        },
+        {
+          "entity": "lifecycle_task",
+          "from": "running",
+          "to": "retrying",
+          "actor": "worker"
+        },
+        {
+          "entity": "lifecycle_task",
+          "from": "retrying",
+          "to": "running",
+          "actor": "worker"
+        },
+        {
+          "entity": "lifecycle_task",
+          "from": "running",
+          "to": "succeeded",
+          "actor": "worker"
+        }
+      ],
+      "recovery": {
+        "task_id": "task_2e9c5299466a7c80056c8ac0137a4816",
+        "source_id": null,
+        "run_id": null,
+        "task_type": "milvus-retry",
+        "idempotency_key": "milvus-retry",
+        "payload_json": "{}",
+        "state": "succeeded",
+        "attempt": 2,
+        "max_attempts": 3,
+        "lease_owner": null,
+        "lease_expires_at": null,
+        "heartbeat_at": 1790405153.8469248,
+        "available_at": 1790405153.7286832,
+        "checkpoint_json": "{}",
+        "error_category": null,
+        "error_message": "",
+        "cancellation_requested": 0,
+        "created_at": 1790405152.4722667,
+        "updated_at": 1790405161.8944564,
+        "finished_at": 1790405161.8944564
+      },
+      "final_data_check": true,
+      "query_validation": null,
+      "metrics": {
+        "source_sync_total": 4.0,
+        "source_sync_failure_total": 0.0,
+        "task_queue_depth": 3.0,
+        "oldest_task_age": 23.88295316696167,
+        "retry_total": 2.0,
+        "dead_letter_total": 0.0,
+        "documents_discovered": 1.0,
+        "documents_updated": 2.0,
+        "documents_deleted": 0.0,
+        "staging_validation_failure_total": 1.0,
+        "release_activation_total": 1.0,
+        "release_rollback_total": 0.0,
+        "orphan_record_count": 0.0,
+        "active_release_health": 1.0,
+        "source_sync_duration": 0.06257253885269165,
+        "source_sync_lag": 11.052740335464478,
+        "revision_processing_duration": 4.309569358825684,
+        "acl_sync_lag": 0.0,
+        "deletion_propagation_lag": 0.0,
+        "connector_rate_limit_total": 0.0,
+        "connector_error_total": 0.0
+      },
+      "audit_event_ids": [
+        49,
+        50,
+        51,
+        52
+      ],
+      "duration_seconds": 9.444752,
+      "error": "",
+      "status": "PASS"
+    },
+    {
+      "number": 8,
+      "name": "Neo4j partial write",
+      "initial_state": {
+        "revision": "rev_partial"
+      },
+      "fault_injection": "raise before transaction commit",
+      "state_transitions": [],
+      "recovery": {
+        "rolled_back": true,
+        "recovered": true
+      },
+      "final_data_check": true,
+      "query_validation": null,
+      "metrics": {
+        "source_sync_total": 4.0,
+        "source_sync_failure_total": 0.0,
+        "task_queue_depth": 3.0,
+        "oldest_task_age": 23.949014902114868,
+        "retry_total": 2.0,
+        "dead_letter_total": 0.0,
+        "documents_discovered": 1.0,
+        "documents_updated": 2.0,
+        "documents_deleted": 0.0,
+        "staging_validation_failure_total": 1.0,
+        "release_activation_total": 1.0,
+        "release_rollback_total": 0.0,
+        "orphan_record_count": 0.0,
+        "active_release_health": 1.0,
+        "source_sync_duration": 0.06257253885269165,
+        "source_sync_lag": 11.118802070617676,
+        "revision_processing_duration": 4.309569358825684,
+        "acl_sync_lag": 0.0,
+        "deletion_propagation_lag": 0.0,
+        "connector_rate_limit_total": 0.0,
+        "connector_error_total": 0.0
+      },
+      "audit_event_ids": [],
+      "duration_seconds": 0.065612,
+      "error": "",
+      "status": "PASS"
+    },
+    {
+      "number": 9,
+      "name": "object storage write failure",
+      "initial_state": {
+        "revision": "rev_object_recovered"
+      },
+      "fault_injection": "closed MinIO port",
+      "state_transitions": [],
+      "recovery": {
+        "failed_closed": true,
+        "recovered": true
+      },
+      "final_data_check": true,
+      "query_validation": null,
+      "metrics": {
+        "source_sync_total": 4.0,
+        "source_sync_failure_total": 0.0,
+        "task_queue_depth": 3.0,
+        "oldest_task_age": 24.182873249053955,
+        "retry_total": 2.0,
+        "dead_letter_total": 0.0,
+        "documents_discovered": 1.0,
+        "documents_updated": 2.0,
+        "documents_deleted": 0.0,
+        "staging_validation_failure_total": 1.0,
+        "release_activation_total": 1.0,
+        "release_rollback_total": 0.0,
+        "orphan_record_count": 0.0,
+        "active_release_health": 1.0,
+        "source_sync_duration": 0.06257253885269165,
+        "source_sync_lag": 11.352660417556763,
+        "revision_processing_duration": 4.309569358825684,
+        "acl_sync_lag": 0.0,
+        "deletion_propagation_lag": 0.0,
+        "connector_rate_limit_total": 0.0,
+        "connector_error_total": 0.0
+      },
+      "audit_event_ids": [],
+      "duration_seconds": 0.234751,
+      "error": "",
+      "status": "PASS"
+    },
+    {
+      "number": 10,
+      "name": "permission revocation propagation",
+      "initial_state": {
+        "visibility": "public"
+      },
+      "fault_injection": "replace ACL with private allow-list",
+      "state_transitions": [],
+      "recovery": {
+        "backends": [
+          "milvus",
+          "neo4j",
+          "objects"
+        ],
+        "lag_seconds": 11.118290662765503
+      },
+      "final_data_check": true,
+      "query_validation": {
+        "milvus": true,
+        "neo4j": true,
+        "objects": true
+      },
+      "metrics": {
+        "source_sync_total": 4.0,
+        "source_sync_failure_total": 0.0,
+        "task_queue_depth": 3.0,
+        "oldest_task_age": 35.32135343551636,
+        "retry_total": 2.0,
+        "dead_letter_total": 0.0,
+        "documents_discovered": 1.0,
+        "documents_updated": 2.0,
+        "documents_deleted": 0.0,
+        "staging_validation_failure_total": 1.0,
+        "release_activation_total": 1.0,
+        "release_rollback_total": 0.0,
+        "orphan_record_count": 0.0,
+        "active_release_health": 1.0,
+        "source_sync_duration": 0.06257253885269165,
+        "source_sync_lag": 22.491140604019165,
+        "revision_processing_duration": 4.309569358825684,
+        "acl_sync_lag": 30.785099506378174,
+        "deletion_propagation_lag": 0.0,
+        "connector_rate_limit_total": 0.0,
+        "connector_error_total": 0.0
+      },
+      "audit_event_ids": [],
+      "duration_seconds": 11.138536,
+      "error": "",
+      "status": "PASS"
+    },
+    {
+      "number": 11,
+      "name": "delete propagation",
+      "initial_state": {
+        "revision": "rev_18bc3f5a3bf6dd2076ef6e612f69ca75"
+      },
+      "fault_injection": "tombstone then delete all external projections",
+      "state_transitions": [
+        {
+          "entity": "deletion",
+          "from": "detected",
+          "to": "tombstoned",
+          "actor": "deletion"
+        },
+        {
+          "entity": "deletion",
+          "from": "tombstoned",
+          "to": "propagating",
+          "actor": "deletion"
+        },
+        {
+          "entity": "deletion",
+          "from": "propagating",
+          "to": "verified",
+          "actor": "deletion"
+        },
+        {
+          "entity": "deletion",
+          "from": "verified",
+          "to": "completed",
+          "actor": "deletion"
+        }
+      ],
+      "recovery": {
+        "deletion_id": "del_45d1812ee973a89de26804803cf69a54",
+        "document_id": "doc_f0de3fd394e5662fdec7ebf1",
+        "revision_id": "rev_18bc3f5a3bf6dd2076ef6e612f69ca75",
+        "idempotency_key": "delete:doc_f0de3fd394e5662fdec7ebf1:rev_18bc3f5a3bf6dd2076ef6e612f69ca75",
+        "state": "completed",
+        "targets_json": "[\"milvus\",\"neo4j\",\"objects\"]",
+        "completed_targets_json": "[\"milvus\",\"neo4j\",\"objects\"]",
+        "verification_json": "{\"milvus\":true,\"neo4j\":true,\"objects\":true}",
+        "error_message": "",
+        "detected_at": 1790405173.3749485,
+        "completed_at": 1790405184.0261443,
+        "updated_at": 1790405184.0261443
+      },
+      "final_data_check": true,
+      "query_validation": {
+        "milvus": false,
+        "neo4j": false,
+        "objects": false
+      },
+      "metrics": {
+        "source_sync_total": 4.0,
+        "source_sync_failure_total": 0.0,
+        "task_queue_depth": 3.0,
+        "oldest_task_age": 46.0316219329834,
+        "retry_total": 2.0,
+        "dead_letter_total": 0.0,
+        "documents_discovered": 1.0,
+        "documents_updated": 2.0,
+        "documents_deleted": 1.0,
+        "staging_validation_failure_total": 1.0,
+        "release_activation_total": 1.0,
+        "release_rollback_total": 0.0,
+        "orphan_record_count": 0.0,
+        "active_release_health": 1.0,
+        "source_sync_duration": 0.06257253885269165,
+        "source_sync_lag": 33.201409101486206,
+        "revision_processing_duration": 4.309569358825684,
+        "acl_sync_lag": 30.785099506378174,
+        "deletion_propagation_lag": 10.668408632278442,
+        "connector_rate_limit_total": 0.0,
+        "connector_error_total": 0.0
+      },
+      "audit_event_ids": [
+        54,
+        55,
+        56,
+        57
+      ],
+      "duration_seconds": 10.680113,
+      "error": "",
+      "status": "PASS"
+    },
+    {
+      "number": 12,
+      "name": "orphan reconciliation",
+      "initial_state": {
+        "orphan": "rev_orphan_real"
+      },
+      "fault_injection": "insert Milvus row without control-plane record",
+      "state_transitions": [],
+      "recovery": [
+        {
+          "backend": "milvus",
+          "kind": "storage_orphan",
+          "revision_id": "rev_12ac6edddb4eedab8b0e01182a9cf37f",
+          "action": "delete_orphan",
+          "repaired": true
+        },
+        {
+          "backend": "milvus",
+          "kind": "storage_orphan",
+          "revision_id": "rev_milvus_recovered",
+          "action": "delete_orphan",
+          "repaired": true
+        },
+        {
+          "backend": "milvus",
+          "kind": "storage_orphan",
+          "revision_id": "rev_orphan_real",
+          "action": "delete_orphan",
+          "repaired": true
+        },
+        {
+          "backend": "neo4j",
+          "kind": "storage_orphan",
+          "revision_id": "rev_12ac6edddb4eedab8b0e01182a9cf37f",
+          "action": "delete_orphan",
+          "repaired": true
+        },
+        {
+          "backend": "neo4j",
+          "kind": "storage_orphan",
+          "revision_id": "rev_partial",
+          "action": "delete_orphan",
+          "repaired": true
+        },
+        {
+          "backend": "objects",
+          "kind": "storage_orphan",
+          "revision_id": "rev_12ac6edddb4eedab8b0e01182a9cf37f",
+          "action": "delete_orphan",
+          "repaired": true
+        },
+        {
+          "backend": "objects",
+          "kind": "storage_orphan",
+          "revision_id": "rev_object_recovered",
+          "action": "delete_orphan",
+          "repaired": true
+        }
+      ],
+      "final_data_check": true,
+      "query_validation": null,
+      "metrics": {
+        "source_sync_total": 4.0,
+        "source_sync_failure_total": 0.0,
+        "task_queue_depth": 3.0,
+        "oldest_task_age": 89.3834719657898,
+        "retry_total": 2.0,
+        "dead_letter_total": 0.0,
+        "documents_discovered": 1.0,
+        "documents_updated": 2.0,
+        "documents_deleted": 1.0,
+        "staging_validation_failure_total": 1.0,
+        "release_activation_total": 1.0,
+        "release_rollback_total": 0.0,
+        "orphan_record_count": 7.0,
+        "active_release_health": 1.0,
+        "source_sync_duration": 0.06257253885269165,
+        "source_sync_lag": 76.5532591342926,
+        "revision_processing_duration": 4.309569358825684,
+        "acl_sync_lag": 30.785099506378174,
+        "deletion_propagation_lag": 10.668408632278442,
+        "connector_rate_limit_total": 0.0,
+        "connector_error_total": 0.0
+      },
+      "audit_event_ids": [
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64
+      ],
+      "duration_seconds": 32.325825,
+      "error": "",
+      "status": "PASS"
+    },
+    {
+      "number": 13,
+      "name": "candidate rollback",
+      "initial_state": {
+        "active": "acceptance-candidate"
+      },
+      "fault_injection": "operator rollback",
+      "state_transitions": [
+        {
+          "entity": "index_release",
+          "from": "active",
+          "to": "rolled_back",
+          "actor": "rollback"
+        }
+      ],
+      "recovery": {
+        "release_id": "acceptance-base",
+        "source_revisions_json": "[\"rev_18bc3f5a3bf6dd2076ef6e612f69ca75\"]",
+        "chunk_collection": "kb_stage3_acceptance_20260926t064537z",
+        "entity_collection": "entities-base",
+        "graph_version": "20260926t064537z",
+        "object_asset_namespace": "stage3-acceptance/20260926t064537z",
+        "schema_version": "knowledge-release-v1",
+        "evaluation_report": "",
+        "manifest_json": "{\"chunk_collection\":\"kb_stage3_acceptance_20260926t064537z\",\"entity_collection\":\"entities-base\",\"evaluation_report\":\"\",\"graph_version\":\"20260926t064537z\",\"object_asset_namespace\":\"stage3-acceptance/20260926t064537z\",\"release_id\":\"acceptance-base\",\"schema_version\":\"knowledge-release-v1\",\"source_revisions\":[\"rev_18bc3f5a3bf6dd2076ef6e612f69ca75\"]}",
+        "manifest_hash": "a1d3854f81eff2216a7aa86b419f71a3e62b151a30fa36aec9107a488aa325cc",
+        "current_state": "active",
+        "previous_release_id": null,
+        "activated_at": 1790405238.615354,
+        "rolled_back_at": null,
+        "created_at": 1790405150.9065294,
+        "updated_at": 1790405238.615354
+      },
+      "final_data_check": true,
+      "query_validation": {
+        "CHUNKS_COLLECTION": "kb_stage3_acceptance_20260926t064537z",
+        "ENTITY_NAME_COLLECTION": "entities-base",
+        "KG_GRAPH_VERSION": "20260926t064537z",
+        "OBJECT_ASSET_NAMESPACE": "stage3-acceptance/20260926t064537z",
+        "manifest_hash": "a1d3854f81eff2216a7aa86b419f71a3e62b151a30fa36aec9107a488aa325cc",
+        "release_id": "acceptance-base"
+      },
+      "metrics": {
+        "source_sync_total": 4.0,
+        "source_sync_failure_total": 0.0,
+        "task_queue_depth": 3.0,
+        "oldest_task_age": 100.58511400222778,
+        "retry_total": 2.0,
+        "dead_letter_total": 0.0,
+        "documents_discovered": 1.0,
+        "documents_updated": 2.0,
+        "documents_deleted": 1.0,
+        "staging_validation_failure_total": 1.0,
+        "release_activation_total": 2.0,
+        "release_rollback_total": 1.0,
+        "orphan_record_count": 7.0,
+        "active_release_health": 1.0,
+        "source_sync_duration": 0.06257253885269165,
+        "source_sync_lag": 87.75490117073059,
+        "revision_processing_duration": 4.309569358825684,
+        "acl_sync_lag": 30.785099506378174,
+        "deletion_propagation_lag": 10.668408632278442,
+        "connector_rate_limit_total": 0.0,
+        "connector_error_total": 0.0
+      },
+      "audit_event_ids": [
+        71
+      ],
+      "duration_seconds": 0.034343,
+      "error": "",
+      "status": "PASS"
+    },
+    {
+      "number": 14,
+      "name": "concurrent source sync",
+      "initial_state": {
+        "lease_owner": "worker-a"
+      },
+      "fault_injection": "second worker claims same source",
+      "state_transitions": [],
+      "recovery": {
+        "second_rejected": true,
+        "cursor": "82d806466aa222068580fdebcd903ad03e11d0495fe2d5ccc1b140ce0bc82879"
+      },
+      "final_data_check": true,
+      "query_validation": null,
+      "metrics": {
+        "source_sync_total": 6.0,
+        "source_sync_failure_total": 0.0,
+        "task_queue_depth": 3.0,
+        "oldest_task_age": 100.65701150894165,
+        "retry_total": 2.0,
+        "dead_letter_total": 0.0,
+        "documents_discovered": 1.0,
+        "documents_updated": 2.0,
+        "documents_deleted": 1.0,
+        "staging_validation_failure_total": 1.0,
+        "release_activation_total": 2.0,
+        "release_rollback_total": 1.0,
+        "orphan_record_count": 7.0,
+        "active_release_health": 1.0,
+        "source_sync_duration": 0.06257253885269165,
+        "source_sync_lag": 87.82679867744446,
+        "revision_processing_duration": 4.309569358825684,
+        "acl_sync_lag": 30.785099506378174,
+        "deletion_propagation_lag": 10.668408632278442,
+        "connector_rate_limit_total": 0.0,
+        "connector_error_total": 0.0
+      },
+      "audit_event_ids": [],
+      "duration_seconds": 0.015273,
+      "error": "",
+      "status": "PASS"
+    },
+    {
+      "number": 15,
+      "name": "DLQ and safe replay",
+      "initial_state": {
+        "task": "task_34aab35ee843bb244ebbeb0c912cb8ce"
+      },
+      "fault_injection": "poison failure exceeds retry policy",
+      "state_transitions": [
+        {
+          "entity": "lifecycle_task",
+          "from": "pending",
+          "to": "running",
+          "actor": "worker"
+        },
+        {
+          "entity": "lifecycle_task",
+          "from": "running",
+          "to": "dead_lettered",
+          "actor": "worker"
+        },
+        {
+          "entity": "lifecycle_task",
+          "from": "dead_lettered",
+          "to": "pending",
+          "actor": "operator"
+        }
+      ],
+      "recovery": {
+        "dead_state": "dead_lettered",
+        "replayed_state": "pending",
+        "attempt": 0
+      },
+      "final_data_check": true,
+      "query_validation": null,
+      "metrics": {
+        "source_sync_total": 6.0,
+        "source_sync_failure_total": 0.0,
+        "task_queue_depth": 4.0,
+        "oldest_task_age": 100.74030947685242,
+        "retry_total": 2.0,
+        "dead_letter_total": 0.0,
+        "documents_discovered": 1.0,
+        "documents_updated": 2.0,
+        "documents_deleted": 1.0,
+        "staging_validation_failure_total": 1.0,
+        "release_activation_total": 2.0,
+        "release_rollback_total": 1.0,
+        "orphan_record_count": 7.0,
+        "active_release_health": 1.0,
+        "source_sync_duration": 0.06257253885269165,
+        "source_sync_lag": 87.91009664535522,
+        "revision_processing_duration": 4.309569358825684,
+        "acl_sync_lag": 30.785099506378174,
+        "deletion_propagation_lag": 10.668408632278442,
+        "connector_rate_limit_total": 0.0,
+        "connector_error_total": 0.0
+      },
+      "audit_event_ids": [
+        76,
+        77,
+        78
+      ],
+      "duration_seconds": 0.064835,
+      "error": "",
+      "status": "PASS"
+    }
+  ],
+  "metrics_final": {
+    "source_sync_total": 6.0,
+    "source_sync_failure_total": 0.0,
+    "task_queue_depth": 4.0,
+    "oldest_task_age": 100.7429141998291,
+    "retry_total": 2.0,
+    "dead_letter_total": 0.0,
+    "documents_discovered": 1.0,
+    "documents_updated": 2.0,
+    "documents_deleted": 1.0,
+    "staging_validation_failure_total": 1.0,
+    "release_activation_total": 2.0,
+    "release_rollback_total": 1.0,
+    "orphan_record_count": 7.0,
+    "active_release_health": 1.0,
+    "source_sync_duration": 0.06257253885269165,
+    "source_sync_lag": 87.91270136833191,
+    "revision_processing_duration": 4.309569358825684,
+    "acl_sync_lag": 30.785099506378174,
+    "deletion_propagation_lag": 10.668408632278442,
+    "connector_rate_limit_total": 0.0,
+    "connector_error_total": 0.0
+  },
+  "audit_event_count": 77,
+  "artifacts": {
+    "database": "C:\\Users\\TCzhao\\PycharmProjects\\251020\\shopkeeper_brain\\output\\stage3-lifecycle-acceptance.20260926t064537z.sqlite3",
+    "fixture_namespace": "C:\\Users\\TCzhao\\PycharmProjects\\251020\\shopkeeper_brain\\output\\stage3-fixtures-20260926t064537z",
+    "active_pointer": "C:\\Users\\TCzhao\\PycharmProjects\\251020\\shopkeeper_brain\\output\\stage3-fixtures-20260926t064537z\\active-release.json"
+  },
+  "environment_note": "Local compose infrastructure at 127.0.0.1; frozen stage-2 collections were not present in this Milvus volume."
+}

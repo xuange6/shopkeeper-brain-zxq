@@ -8,6 +8,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from knowledge.api.import_file_router import register_import_router
+from knowledge.api.lifecycle_router import register_lifecycle_router
 from knowledge.api.query_router import register_query_router
 from knowledge.api.system_router import register_system_router
 from knowledge.core.app_config import AppConfig, get_app_config
@@ -21,6 +22,8 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         description=settings.description,
         version=settings.version,
     )
+    if config is not None:
+        app.dependency_overrides[get_app_config] = lambda: settings
 
     allow_credentials = settings.cors_allow_credentials and "*" not in settings.cors_origins
     app.add_middleware(
@@ -32,6 +35,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     )
 
     register_system_router(app)
+    register_lifecycle_router(app)
     register_import_router(app)
     register_query_router(app)
 

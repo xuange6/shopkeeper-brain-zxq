@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shopkeeper-lifecycle-scheduler
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: shopkeeper-lifecycle-scheduler
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: shopkeeper-lifecycle-scheduler
+    spec:
+      serviceAccountName: shopkeeper-brain
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: shopkeeper-lifecycle-scheduler
+      initContainers:
+        - name: migrate-control-plane
+          image: shopkeeper-brain
+          command: ["python", "-m", "knowledge.lifecycle.runtime", "migrate"]
+          env:
+            - name: LIFECYCLE_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: shopkeeper-runtime
+                  key: LIFECYCLE_MIGRATION_DATABASE_URL
+          envFrom:
+            - configMapRef:
+                name: shopkeeper-runtime
+            - secretRef:
+                name: shopkeeper-runtime
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+      containers:
+        - name: scheduler
+          image: shopkeeper-brain
+          command: ["python", "-m", "knowledge.lifecycle.runtime", "scheduler"]
+          env:
+            - name: LIFECYCLE_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: shopkeeper-runtime
+                  key: LIFECYCLE_SCHEDULER_DATABASE_URL
+          envFrom:
+            - configMapRef:
+                name: shopkeeper-runtime
+            - secretRef:
+                name: shopkeeper-runtime
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,time,sys; p=os.environ['LIFECYCLE_RUNTIME_HEARTBEAT_PATH']; sys.exit(0 if os.path.isfile(p) and time.time()-os.path.getmtime(p)<120 else 1)"
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi

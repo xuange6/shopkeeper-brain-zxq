@@ -1,5 +1,7 @@
 """File import API router."""
 
+import os
+
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, UploadFile
 
 from knowledge.core.deps import get_file_import_service, get_task_service
@@ -22,6 +24,16 @@ def _regist_router(app: FastAPI):
             document_key: str | None = Form(None),
             service: FileImportService = Depends(get_file_import_service)
     ) -> UploadResponse:
+        if os.getenv("DISTRIBUTED_RUNTIME", "").strip().lower() in {
+            "1", "true", "yes", "on"
+        }:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "direct background upload is disabled in distributed mode; "
+                    "use a durable lifecycle Source and sync task"
+                ),
+            )
         # 1. Synchronous processing: save file + upload MinIO.
         try:
             task_id, file_dir, import_file_path = service.process_file_upload(file, document_key)

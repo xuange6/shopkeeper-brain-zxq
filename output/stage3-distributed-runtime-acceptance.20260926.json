@@ -1,0 +1,7 @@
+{
+  "backend": "redis",
+  "cross_process_sse_stream": true,
+  "cross_process_task_state": true,
+  "observed_events": 2,
+  "status": "passed"
+}

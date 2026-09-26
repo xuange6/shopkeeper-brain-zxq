@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shopkeeper-runtime
+data:
+  APP_CORS_ORIGINS: https://knowledge.example.com
+  OPENAI_API_BASE: https://model-gateway.example.internal/v1
+  MILVUS_URL: https://milvus.example.internal:19530
+  NEO4J_URI: neo4j+s://neo4j.example.internal:7687
+  MINIO_ENDPOINT: object-storage.example.internal:9000
+  MODEL: replace-with-chat-model
+  LLM_DEFAULT_MODEL: replace-with-chat-model
+  ITEM_MODEL: replace-with-json-model
+  KG_MODEL: replace-with-json-model
+  VL_MODEL: replace-with-vision-model

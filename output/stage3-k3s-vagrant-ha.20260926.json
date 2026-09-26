@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-09-26T15:37:48.9848601Z",
+  "cluster": {
+    "distribution": "k3s",
+    "topology": "three-server embedded-etcd",
+    "physical_failure_domains": 1,
+    "limitation": "All three VMs share one Windows host; this validates Kubernetes behavior, not physical-host HA."
+  },
+  "drill": {
+    "started_at": "2026-09-26T15:35:07.0125383Z",
+    "fault": "k3s service stopped",
+    "fault_node": "k3s-3",
+    "observer_node": "k3s-1",
+    "api_ready_during_fault": "ok",
+    "ready_nodes_during_fault": 2,
+    "keda_during_fault": [
+      {
+        "name": "keda-admission-webhooks",
+        "desired_replicas": 2,
+        "ready_replicas": 2,
+        "available_replicas": 2
+      },
+      {
+        "name": "keda-operator",
+        "desired_replicas": 2,
+        "ready_replicas": 2,
+        "available_replicas": 2
+      },
+      {
+        "name": "keda-operator-metrics-apiserver",
+        "desired_replicas": 2,
+        "ready_replicas": 1,
+        "available_replicas": 1
+      }
+    ]
+  },
+  "recovery": {
+    "ready_nodes": 3,
+    "keda": [
+      {
+        "name": "keda-admission-webhooks",
+        "desired_replicas": 2,
+        "ready_replicas": 2,
+        "available_replicas": 2
+      },
+      {
+        "name": "keda-operator",
+        "desired_replicas": 2,
+        "ready_replicas": 2,
+        "available_replicas": 2
+      },
+      {
+        "name": "keda-operator-metrics-apiserver",
+        "desired_replicas": 2,
+        "ready_replicas": 2,
+        "available_replicas": 2
+      }
+    ]
+  }
+}

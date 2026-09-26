@@ -10,6 +10,8 @@ from pathlib import Path
 import os
 from dotenv import load_dotenv
 
+from knowledge.lifecycle.release_config import active_release_value
+
 # 明确加载 knowledge/.env，避免从项目根目录启动时读不到环境变量
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
 
@@ -73,16 +75,22 @@ class ImportConfig:
         default_factory=lambda: os.getenv("MILVUS_URL", "")
     )
     chunks_collection: str = field(
-        default_factory=lambda: os.getenv("CHUNKS_COLLECTION", "")
+        default_factory=lambda: active_release_value(
+            "CHUNKS_COLLECTION", os.getenv("CHUNKS_COLLECTION", "")
+        )
     )
     item_name_collection: str = field(
         default_factory=lambda: os.getenv("ITEM_NAME_COLLECTION", "")
     )
     entity_name_collection: str = field(
-        default_factory=lambda: os.getenv("ENTITY_NAME_COLLECTION", "")
+        default_factory=lambda: active_release_value(
+            "ENTITY_NAME_COLLECTION", os.getenv("ENTITY_NAME_COLLECTION", "")
+        )
     )
     kg_graph_version: str = field(
-        default_factory=lambda: os.getenv("KG_GRAPH_VERSION", "legacy")
+        default_factory=lambda: active_release_value(
+            "KG_GRAPH_VERSION", os.getenv("KG_GRAPH_VERSION", "legacy")
+        )
     )
     kg_fail_on_partial: bool = field(
         default_factory=lambda: _env_bool("KG_FAIL_ON_PARTIAL", True)
@@ -118,6 +126,11 @@ class ImportConfig:
     minio_bucket: str = field(
         default_factory=lambda: os.getenv("MINIO_BUCKET_NAME", "")
     )
+    object_asset_namespace: str = field(
+        default_factory=lambda: active_release_value(
+            "OBJECT_ASSET_NAMESPACE", os.getenv("OBJECT_ASSET_NAMESPACE", "")
+        )
+    )
     minio_secure: bool = field(
         default_factory=lambda: os.getenv("MINIO_SECURE", "false").strip().lower() in {"1", "true", "yes", "on"}
     )
@@ -143,6 +156,11 @@ class ImportConfig:
         if endpoint.startswith(("http://", "https://")):
             return endpoint
         return base_protocol + endpoint
+
+    def asset_object_name(self, suffix: str) -> str:
+        namespace = self.object_asset_namespace.strip("/")
+        clean_suffix = suffix.lstrip("/")
+        return f"{namespace}/{clean_suffix}" if namespace else clean_suffix
 
 
 

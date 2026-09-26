@@ -8,10 +8,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import queue
 from threading import RLock
 import time
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Optional
+
+from knowledge.utils.redis_runtime import get_runtime_redis
 
 if TYPE_CHECKING:
     from fastapi import Request
@@ -30,9 +33,23 @@ _task_stream: Dict[str, queue.Queue] = {}
 _stream_lock = RLock()
 
 
+def _redis_stream_key(task_id: str) -> str:
+    return f"shopkeeper:sse:{task_id}"
+
+
+def _redis_stream_ttl() -> int:
+    try:
+        return max(300, int(os.getenv("TASK_TTL_SECONDS", "86400")))
+    except ValueError:
+        return 86400
+
+
 def get_sse_queue(task_id: str) -> Optional[queue.Queue]:
     """获取指定任务的 SSE 队列。"""
 
+    redis_client = get_runtime_redis()
+    if redis_client is not None:
+        return queue.Queue() if redis_client.exists(_redis_stream_key(task_id)) else None
     with _stream_lock:
         return _task_stream.get(task_id)
 
@@ -40,6 +57,13 @@ def get_sse_queue(task_id: str) -> Optional[queue.Queue]:
 def create_sse_queue(task_id: str) -> queue.Queue:
     """创建并注册一个新的 SSE 队列。"""
 
+    redis_client = get_runtime_redis()
+    if redis_client is not None:
+        key = _redis_stream_key(task_id)
+        redis_client.delete(key)
+        redis_client.xadd(key, {"event": "_created", "data": "{}"})
+        redis_client.expire(key, _redis_stream_ttl())
+        return queue.Queue()
     stream_queue: queue.Queue = queue.Queue()
     with _stream_lock:
         _task_stream[task_id] = stream_queue
@@ -49,6 +73,8 @@ def create_sse_queue(task_id: str) -> queue.Queue:
 def remove_sse_queue(task_id: str) -> None:
     """移除指定任务的 SSE 队列，避免任务结束后占用内存。"""
 
+    if get_runtime_redis() is not None:
+        return
     with _stream_lock:
         _task_stream.pop(task_id, None)
 
@@ -63,6 +89,17 @@ def _sse_pack(event: str, data: Dict[str, Any]) -> str:
 def push_sse_event(task_id: str, event: str, data: Dict[str, Any]) -> None:
     """把一条事件消息推入指定 task_id 的 SSE 队列。"""
 
+    redis_client = get_runtime_redis()
+    if redis_client is not None:
+        key = _redis_stream_key(task_id)
+        redis_client.xadd(
+            key,
+            {"event": event, "data": json.dumps(data, ensure_ascii=False)},
+            maxlen=2000,
+            approximate=True,
+        )
+        redis_client.expire(key, _redis_stream_ttl())
+        return
     stream_queue = get_sse_queue(task_id)
     if stream_queue is None:
         return
@@ -71,6 +108,47 @@ def push_sse_event(task_id: str, event: str, data: Dict[str, Any]) -> None:
 
 async def sse_generator(task_id: str, request: "Request") -> AsyncGenerator[str, None]:
     """SSE 生成器，用于 FastAPI StreamingResponse 持续返回消息。"""
+
+    redis_client = get_runtime_redis()
+    if redis_client is not None:
+        key = _redis_stream_key(task_id)
+        if not redis_client.exists(key):
+            yield _sse_pack(SSEEvent.ERROR, {"error": "SSE task not found"})
+            return
+        yield _sse_pack(SSEEvent.READY, {})
+        last_id = "0-0"
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                messages = await asyncio.to_thread(
+                    redis_client.xread,
+                    {key: last_id},
+                    count=100,
+                    block=1000,
+                )
+                if not messages:
+                    yield ": keep-alive\n\n"
+                    continue
+                for _, entries in messages:
+                    for entry_id, fields in entries:
+                        last_id = entry_id
+                        event = str(fields.get("event", ""))
+                        if event == "_created":
+                            continue
+                        try:
+                            data = json.loads(str(fields.get("data", "{}")))
+                        except json.JSONDecodeError:
+                            data = {"error": "invalid stream event"}
+                            event = SSEEvent.ERROR
+                        yield _sse_pack(event, data)
+                        if event in {SSEEvent.FINAL, SSEEvent.ERROR}:
+                            return
+        except (ConnectionResetError, BrokenPipeError):
+            return
+        except asyncio.CancelledError:
+            raise
+        return
 
     stream_queue = get_sse_queue(task_id)
     if stream_queue is None:

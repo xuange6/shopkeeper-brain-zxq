@@ -1,0 +1,14 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: shopkeeper-api
+  namespace: shopkeeper-brain
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: shopkeeper-api
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s

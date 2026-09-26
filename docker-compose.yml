@@ -1,6 +1,22 @@
 name: shopkeeper-brain
 
 services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-shopkeeper}"
+      POSTGRES_USER: "${POSTGRES_USER:-shopkeeper}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-shopkeeper-dev}"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-shopkeeper} -d $${POSTGRES_DB:-shopkeeper}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   etcd:
     image: quay.io/coreos/etcd:v3.5.18
     environment:
@@ -25,8 +41,8 @@ services:
     # archive is pinned to the exact digest used by the validated release.
     image: ghcr.io/l33tlamer/minio-backup@sha256:a1ea29fa28355559ef137d71fc570e508a214ec84ff8083e39bc5428980b015e
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER:-minioadmin}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:-minioadmin}"
     command: server /data --console-address ":9001"
     ports:
       - "9000:9000"
@@ -78,7 +94,7 @@ services:
   neo4j:
     image: neo4j:5.26-community
     environment:
-      NEO4J_AUTH: neo4j/shopkeeper-dev
+      NEO4J_AUTH: "${NEO4J_USERNAME:-neo4j}/${NEO4J_PASSWORD:-shopkeeper-dev}"
       NEO4J_server_memory_heap_initial__size: 512m
       NEO4J_server_memory_heap_max__size: 1G
     ports:
@@ -91,13 +107,14 @@ services:
       test:
         [
           "CMD-SHELL",
-          "cypher-shell -u neo4j -p shopkeeper-dev 'RETURN 1' >/dev/null 2>&1",
+          "auth_user=$${NEO4J_AUTH%%/*}; auth_password=$${NEO4J_AUTH#*/}; cypher-shell -u \"$$auth_user\" -p \"$$auth_password\" 'RETURN 1' >/dev/null 2>&1",
         ]
       interval: 15s
       timeout: 10s
       retries: 10
 
 volumes:
+  postgres-data:
   etcd-data:
   minio-data:
   milvus-data:

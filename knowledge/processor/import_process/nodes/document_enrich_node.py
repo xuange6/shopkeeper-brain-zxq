@@ -60,7 +60,12 @@ class DocumentEnrichNode(BaseNode):
             trusted_directory = Path(state["file_dir"])
         elif state.get("import_file_path"):
             trusted_directory = Path(state["import_file_path"]).parent
-        uploaded = self._upload_assets(document, image_blocks, trusted_directory)
+        uploaded = self._upload_assets(
+            document,
+            image_blocks,
+            trusted_directory,
+            visibility=str(state.get("visibility") or "public"),
+        )
         blocks_by_id = {block.id: block for block in document.blocks}
         for chunk in document.chunks:
             # Rebuild the deterministic pre-enrichment context on retries.
@@ -121,7 +126,12 @@ class DocumentEnrichNode(BaseNode):
         return state
 
     def _upload_assets(
-        self, document: DocumentIR, image_blocks, trusted_directory: Path | None
+        self,
+        document: DocumentIR,
+        image_blocks,
+        trusted_directory: Path | None,
+        *,
+        visibility: str,
     ) -> int:
         # Validate every asset before obtaining a client or uploading any file.
         # This also rejects forged IR local paths and links escaping the task.
@@ -151,16 +161,24 @@ class DocumentEnrichNode(BaseNode):
         uploaded = 0
         for block, path in safe_assets:
             suffix = path.suffix.lower()
-            object_name = f"documents/{document.document_id}/assets/{block.id}{suffix}"
+            object_name = self.config.asset_object_name(
+                f"documents/{document.document_id}/assets/{block.id}{suffix}"
+            )
             content_type = _asset_content_type(path)
             try:
                 client.fput_object(
                     self.config.minio_bucket, object_name, str(path),
                     content_type=content_type,
                 )
-                block.image.uri = (
-                    f"{self.config.get_minio_base_url()}/{self.config.minio_bucket}/{object_name}"
-                )
+                if visibility == "public":
+                    block.image.uri = (
+                        f"{self.config.get_minio_base_url()}/{self.config.minio_bucket}/{object_name}"
+                    )
+                else:
+                    # Never publish a directly fetchable object URL for protected
+                    # content. A trusted API may exchange this internal URI for a
+                    # short-lived signed URL after authorizing the caller.
+                    block.image.uri = f"minio://{self.config.minio_bucket}/{object_name}"
                 block.image.mime_type = content_type
                 uploaded += 1
             except Exception as exc:

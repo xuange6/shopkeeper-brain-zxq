@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shopkeeper-runtime
+data:
+  APP_ENV: production
+  APP_HOST: 0.0.0.0
+  APP_PORT: "8000"
+  APP_RELOAD: "false"
+  APP_CORS_ORIGINS: https://knowledge.example.com
+  APP_CORS_ALLOW_CREDENTIALS: "true"
+  DISTRIBUTED_RUNTIME: "true"
+  LIFECYCLE_AUTO_MIGRATE: "false"
+  LIFECYCLE_RELEASE_POINTER_MODE: database
+  LIFECYCLE_SCHEDULER_POLL_SECONDS: "5"
+  LIFECYCLE_WORKER_POLL_SECONDS: "1"
+  LIFECYCLE_WORKER_LEASE_SECONDS: "60"
+  LIFECYCLE_RECONCILE_INTERVAL_SECONDS: "900"
+  LIFECYCLE_RUNTIME_HEARTBEAT_PATH: /tmp/shopkeeper/runtime-heartbeat
+  LIFECYCLE_STAGING_ROOT: /var/lib/shopkeeper/staging
+  IMPORT_UPLOAD_DIR: /var/lib/shopkeeper/uploads
+  TASK_TTL_SECONDS: "86400"
+  ACCESS_DEFAULT_TENANT: public
+  RAG_ACL_POLICY_VERSION: retrieval-acl-v1
+  MILVUS_URL: https://milvus.example.internal:19530
+  NEO4J_URI: neo4j+s://neo4j.example.internal:7687
+  NEO4J_USERNAME: shopkeeper
+  NEO4J_DATABASE: neo4j
+  MINIO_ENDPOINT: object-storage.example.internal:9000
+  MINIO_SECURE: "true"
+  MINIO_BUCKET_NAME: shopkeeper-brain
+  MONGO_DB_NAME: shopkeeper_brain
+  MONGO_CHAT_COLLECTION: chat_message
+  MONGO_SERVER_SELECTION_TIMEOUT_MS: "2000"
+  OPENAI_API_BASE: https://model-gateway.example.internal/v1
+  MODEL: replace-with-chat-model
+  LLM_DEFAULT_MODEL: replace-with-chat-model
+  ITEM_MODEL: replace-with-json-model
+  KG_MODEL: replace-with-json-model
+  VL_MODEL: replace-with-vision-model
+  BGE_M3_PATH: /models/bge-m3
+  BGE_RERANKER_LARGE: /models/bge-reranker-large
+  BGE_RERANKER_DEVICE: cpu
+  BGE_RERANKER_FP16: "false"
+  EMBEDDING_DIM: "1024"
+  CHUNKS_COLLECTION: knowledge_chunks_bootstrap
+  ENTITY_NAME_COLLECTION: knowledge_entities_bootstrap
+  ITEM_NAME_COLLECTION: knowledge_item_names
+  KG_GRAPH_VERSION: bootstrap

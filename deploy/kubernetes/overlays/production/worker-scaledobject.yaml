@@ -1,0 +1,44 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: shopkeeper-lifecycle-worker
+spec:
+  scaleTargetRef:
+    name: shopkeeper-lifecycle-worker
+    envSourceContainerName: worker
+  pollingInterval: 15
+  cooldownPeriod: 300
+  minReplicaCount: 2
+  maxReplicaCount: 30
+  fallback:
+    failureThreshold: 3
+    replicas: 3
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+            - type: Percent
+              value: 25
+              periodSeconds: 60
+  triggers:
+    - type: postgresql
+      metadata:
+        query: >-
+          SELECT COUNT(*) FROM lifecycle_tasks
+          WHERE state IN ('pending','retrying') AND available_at <= EXTRACT(EPOCH FROM NOW())
+        targetQueryValue: "4"
+        activationTargetQueryValue: "0"
+      authenticationRef:
+        name: shopkeeper-worker-scaler
+---
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: shopkeeper-worker-scaler
+spec:
+  secretTargetRef:
+    - parameter: connection
+      name: shopkeeper-runtime
+      key: KEDA_DATABASE_URL

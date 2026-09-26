@@ -1,0 +1,164 @@
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "5"
+
+x-shopkeeper-app: &shopkeeper-app
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: "shopkeeper-brain:${SHOPKEEPER_IMAGE_TAG:-stage3}"
+  env_file:
+    - deploy/.env.production
+  environment: &shopkeeper-environment
+    APP_ENV: production
+    APP_RELOAD: "false"
+    LIFECYCLE_DATABASE_URL_FILE: /run/secrets/lifecycle_database_url
+    LIFECYCLE_ADMIN_TOKEN_FILE: /run/secrets/lifecycle_admin_token
+    ACCESS_CONTEXT_HMAC_SECRET_FILE: /run/secrets/access_context_hmac_secret
+    NEO4J_PASSWORD_FILE: /run/secrets/neo4j_password
+    MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
+    MONGO_PASSWORD_FILE: /run/secrets/mongo_password
+    MILVUS_URL: http://milvus:19530
+    NEO4J_URI: bolt://neo4j:7687
+    MONGO_USERNAME: "${MONGO_USERNAME:-shopkeeper_admin}"
+    MINIO_ENDPOINT: minio:9000
+    MINIO_ACCESS_KEY: "${MINIO_ROOT_USER:-shopkeeper}"
+    MINIO_BUCKET_NAME: "${MINIO_BUCKET_NAME:-shopkeeper-brain}"
+    IMPORT_UPLOAD_DIR: /var/lib/shopkeeper/uploads
+    LIFECYCLE_ACTIVE_RELEASE_PATH: /var/lib/shopkeeper/state/active-release.json
+    LIFECYCLE_STAGING_ROOT: /var/lib/shopkeeper/staging
+  secrets: &shopkeeper-secrets
+    - lifecycle_database_url
+    - lifecycle_admin_token
+    - access_context_hmac_secret
+    - neo4j_password
+    - minio_secret_key
+    - mongo_password
+  volumes: &shopkeeper-volumes
+    - ./deploy/data/sources:/data/sources:ro
+    - lifecycle-staging:/var/lib/shopkeeper/staging
+    - lifecycle-state:/var/lib/shopkeeper/state
+    - lifecycle-uploads:/var/lib/shopkeeper/uploads
+    - type: bind
+      source: "${MODEL_HOST_DIR:-./models}"
+      target: /models
+      read_only: true
+  depends_on: &shopkeeper-dependencies
+    postgres:
+      condition: service_healthy
+    milvus:
+      condition: service_healthy
+    neo4j:
+      condition: service_healthy
+    minio:
+      condition: service_healthy
+    mongodb:
+      condition: service_healthy
+  restart: unless-stopped
+  init: true
+  logging: *default-logging
+  stop_grace_period: 45s
+
+services:
+  postgres:
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-shopkeeper}"
+      POSTGRES_USER: "${POSTGRES_USER:-shopkeeper}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env.production}"
+    ports: !reset []
+    restart: unless-stopped
+    logging: *default-logging
+
+  etcd:
+    restart: unless-stopped
+    logging: *default-logging
+
+  minio:
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER:-shopkeeper}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in deploy/.env.production}"
+    ports: !reset []
+    restart: unless-stopped
+    logging: *default-logging
+
+  mongodb:
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: "${MONGO_USERNAME:-shopkeeper_admin}"
+      MONGO_INITDB_ROOT_PASSWORD_FILE: /run/secrets/mongo_password
+    secrets:
+      - mongo_password
+    ports: !reset []
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh --quiet --username "$${MONGO_INITDB_ROOT_USERNAME}"
+          --password "$$(cat "$${MONGO_INITDB_ROOT_PASSWORD_FILE}")"
+          --authenticationDatabase admin
+          --eval "db.adminCommand('ping').ok" >/dev/null
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    restart: unless-stopped
+    logging: *default-logging
+
+  neo4j:
+    environment:
+      NEO4J_AUTH: "${NEO4J_USERNAME:-neo4j}/${NEO4J_PASSWORD:?set NEO4J_PASSWORD in deploy/.env.production}"
+      NEO4J_server_memory_heap_initial__size: "${NEO4J_HEAP_INITIAL:-1G}"
+      NEO4J_server_memory_heap_max__size: "${NEO4J_HEAP_MAX:-2G}"
+    ports: !reset []
+    restart: unless-stopped
+    logging: *default-logging
+
+  milvus:
+    ports: !reset []
+    restart: unless-stopped
+    logging: *default-logging
+
+  api:
+    <<: *shopkeeper-app
+    command: ["python", "-m", "knowledge.main"]
+    ports:
+      - "${APP_BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-8000}:8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  lifecycle-scheduler:
+    <<: *shopkeeper-app
+    command: ["python", "-m", "knowledge.lifecycle.runtime", "scheduler"]
+
+  lifecycle-worker:
+    <<: *shopkeeper-app
+    command: ["python", "-m", "knowledge.lifecycle.runtime", "worker"]
+    deploy:
+      replicas: 2
+
+volumes:
+  lifecycle-staging:
+  lifecycle-state:
+  lifecycle-uploads:
+
+secrets:
+  lifecycle_database_url:
+    file: deploy/secrets/lifecycle_database_url.txt
+  lifecycle_admin_token:
+    file: deploy/secrets/lifecycle_admin_token.txt
+  access_context_hmac_secret:
+    file: deploy/secrets/access_context_hmac_secret.txt
+  neo4j_password:
+    file: deploy/secrets/neo4j_password.txt
+  minio_secret_key:
+    file: deploy/secrets/minio_secret_key.txt
+  mongo_password:
+    file: deploy/secrets/mongo_password.txt

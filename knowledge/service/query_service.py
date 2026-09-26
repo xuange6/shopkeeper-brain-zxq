@@ -5,8 +5,11 @@ from __future__ import annotations
 import logging
 import time
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, TYPE_CHECKING
 from uuid import uuid4
+
+if TYPE_CHECKING:
+    from knowledge.lifecycle.store import LifecycleStore
 
 from knowledge.utils.sse_util import SSEEvent, create_sse_queue, push_sse_event
 from knowledge.utils.query_result_utils import (
@@ -29,8 +32,22 @@ from knowledge.utils.task_utils import (
 
 
 class QueryService:
-    def __init__(self) -> None:
+    def __init__(self, lifecycle_store: "LifecycleStore | None" = None) -> None:
         self.logger = logging.getLogger(self.__class__.__name__)
+        self.lifecycle_store = lifecycle_store
+
+    def _query_config(self):
+        from knowledge.processor.query_process.config import QueryConfig
+
+        config = QueryConfig.from_env()
+        if self.lifecycle_store is None:
+            return config
+        release = self.lifecycle_store.get_active_release()
+        if release:
+            config.chunks_collection = str(release["chunk_collection"])
+            config.entity_name_collection = str(release["entity_collection"])
+            config.kg_graph_version = str(release["graph_version"])
+        return config
 
     def generate_session_id(self) -> str:
         return uuid4().hex
@@ -74,6 +91,7 @@ class QueryService:
                 is_stream=is_stream,
                 task_id=task_id,
                 access_context=access_context or {},
+                config=self._query_config(),
             )
             final_state["model_usage"] = finish_model_trace(task_id)
             answer = str(final_state.get("answer", "") or "")

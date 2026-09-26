@@ -1,0 +1,29 @@
+{
+  "k3sVersion": "v1.35.8+k3s1",
+  "sshKeyPath": "",
+  "servers": [
+    {
+      "name": "shopkeeper-k3s-1",
+      "address": "192.168.10.21",
+      "sshUser": "ubuntu",
+      "zone": "home-a"
+    },
+    {
+      "name": "shopkeeper-k3s-2",
+      "address": "192.168.10.22",
+      "sshUser": "ubuntu",
+      "zone": "home-b"
+    },
+    {
+      "name": "shopkeeper-k3s-3",
+      "address": "192.168.10.23",
+      "sshUser": "ubuntu",
+      "zone": "home-c"
+    }
+  ],
+  "tlsSans": [
+    "192.168.10.21",
+    "192.168.10.22",
+    "192.168.10.23"
+  ]
+}

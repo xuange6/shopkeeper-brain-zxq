@@ -1,0 +1,45 @@
+# frozen_string_literal: true
+
+required_vagrant_version = ">= 2.4.0"
+Vagrant.require_version required_vagrant_version
+
+box_name = ENV.fetch("K3S_LAB_BOX", "bento/ubuntu-24.04")
+box_version = ENV["K3S_LAB_BOX_VERSION"]
+vm_memory = Integer(ENV.fetch("K3S_LAB_VM_MEMORY_MB", "4096"), 10)
+vm_cpus = Integer(ENV.fetch("K3S_LAB_VM_CPUS", "2"), 10)
+
+abort "K3S_LAB_VM_MEMORY_MB must be at least 4096" if vm_memory < 4096
+abort "K3S_LAB_VM_CPUS must be at least 2" if vm_cpus < 2
+
+nodes = [
+  { name: "k3s-1", ip: "192.168.56.21", zone: "lab-a" },
+  { name: "k3s-2", ip: "192.168.56.22", zone: "lab-b" },
+  { name: "k3s-3", ip: "192.168.56.23", zone: "lab-c" }
+].freeze
+
+Vagrant.configure("2") do |config|
+  config.vm.box = box_name
+  config.vm.box_check_update = false
+  # Windows Hyper-V compatibility mode can make the first Linux boot much slower.
+  config.vm.boot_timeout = 900
+  config.vm.box_version = box_version unless box_version.nil? || box_version.empty?
+  config.vm.synced_folder ".", "/vagrant", disabled: true
+  config.ssh.keep_alive = true
+
+  nodes.each do |node|
+    config.vm.define node[:name] do |machine|
+      machine.vm.hostname = node[:name]
+      machine.vm.network "private_network", ip: node[:ip]
+      machine.vm.disk :disk, size: "30GB", primary: true
+
+      machine.vm.provider "virtualbox" do |virtualbox|
+        virtualbox.name = "shopkeeper-#{node[:name]}"
+        virtualbox.memory = vm_memory
+        virtualbox.cpus = vm_cpus
+        virtualbox.gui = false
+        virtualbox.linked_clone = true
+        virtualbox.customize ["modifyvm", :id, "--description", "shopkeeper_brain K3s HA acceptance node #{node[:zone]}"]
+      end
+    end
+  end
+end

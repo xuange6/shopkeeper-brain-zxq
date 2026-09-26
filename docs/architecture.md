@@ -60,13 +60,9 @@
 
 ## 当前运行边界
 
-任务状态和 SSE 队列目前是进程内实现，适合单机、单 Worker 演示。生产部署的下一步是：
+本地模式的短时任务/SSE 使用进程内通道；Kubernetes 分布式模式使用 Redis Hash/Streams，使任务状态和 SSE 可跨 API Pod 读取。旧 `/upload` 的进程内后台导入在分布式模式下被禁用，生产导入统一走 durable lifecycle Source。企业知识生命周期使用 PostgreSQL 持久控制面和数据库任务队列。独立 scheduler 与多个 worker 通过 advisory leader lock、行锁、lease、checkpoint、重试和 DLQ 协作，同一 source 排他处理。文档 revision 写入不可变 staging Release，经过硬校验后原子激活；ACL、删除传播、reconciliation、Prometheus 指标和自动回滚均在阶段 3 接通。
 
-1. Redis 持久任务 + Pub/Sub；
-2. Celery / RQ / Dramatiq worker；
-3. document_id + version + staging/active/retired 两阶段发布；
-4. Prometheus 指标与 OpenTelemetry trace；
-5. 外部依赖超时、重试和熔断。
+当前生产边界是单 region、多可用区 Kubernetes；跨地域 active-active、外部 IdP、集中 OpenTelemetry collector、网关限流和平台级 secret manager 由目标环境提供。主生产入口见 `docs/DISTRIBUTED_PRODUCTION_DEPLOYMENT.md`，单机演练见 `docs/PRODUCTION_DEPLOYMENT.md`。
 
 ## 配置原则
 

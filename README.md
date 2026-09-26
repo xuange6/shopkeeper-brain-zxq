@@ -12,9 +12,9 @@ Python 3.10+ · FastAPI · LangGraph · BGE-M3 · Milvus · Neo4j · MongoDB · 
 
 ---
 
-Shopkeeper Brain 不只是“召回几段文本再交给大模型”。当前阶段 2 把文档结构化 IR、多路检索、知识图谱、Web 路由、校准拒答、逐声明引用、安全策略、费用核算和发布回滚串成了一条可观测的工业级 RAG 管线。
+Shopkeeper Brain 不只是“召回几段文本再交给大模型”。阶段 2 把文档结构化 IR、多路检索、知识图谱、Web 路由、校准拒答、逐声明引用、安全策略和费用核算串成可观测的工业级 RAG 管线；阶段 3 又加入 PostgreSQL 企业知识生命周期、独立 scheduler/worker、增量同步、ACL/删除传播、不可变 Release、硬校验和回滚。
 
-阶段 2 已于 2026-09-25 通过真实服务门禁。当前发布候选在冻结的 12 个用例上通过 12/12，核心用例 9/9；自动化测试通过 230/230。阶段 0、阶段 1 以及阶段 2 中间失败证据均保留，没有回写或覆盖。
+阶段 2 已于 2026-09-25 通过真实服务门禁。阶段 3 于 2026-09-26 通过 273 项自动化测试、15/15 基础设施故障演练、真实 PostgreSQL 并发/leader failover、真实 Redis 跨进程状态/SSE，以及真实 Milvus/Neo4j/MinIO ACL 与删除验收。历史失败证据均保留，没有回写或覆盖。
 
 <table>
   <tr>
@@ -125,9 +125,9 @@ docker compose up -d
 docker compose ps
 ```
 
-Compose 会启动 Milvus、MongoDB、Neo4j、MinIO 和 etcd。2026-09 起上游不再公开原 MinIO 历史镜像，因此 Compose 使用内容摘要固定的归档副本；摘要仍是阶段 2 验证所用的 `a1ea29fa…b015e`，不会跟随浮动标签升级。
+Compose 会启动 PostgreSQL、Milvus、MongoDB、Neo4j、MinIO 和 etcd。2026-09 起上游不再公开原 MinIO 历史镜像，因此 Compose 使用内容摘要固定的归档副本；摘要仍是阶段 2 验证所用的 `a1ea29fa…b015e`，不会跟随浮动标签升级。
 
-默认端口：Milvus `19530`、MongoDB `27017`、Neo4j Browser `7474`、MinIO API / Console `9000` / `9001`。Compose 中的默认凭据仅限本机开发，生产部署必须替换。
+默认端口：PostgreSQL `5432`、Milvus `19530`、MongoDB `27017`、Neo4j Browser `7474`、MinIO API / Console `9000` / `9001`。Compose 中的默认凭据仅限本机开发，生产部署必须替换。
 
 ### 3. 配置应用
 
@@ -135,7 +135,7 @@ Compose 会启动 Milvus、MongoDB、Neo4j、MinIO 和 etcd。2026-09 起上游�
 Copy-Item knowledge\.env.example knowledge\.env
 ```
 
-至少配置模型服务、BGE-M3 / reranker 路径、Milvus、Neo4j、MongoDB 和 MinIO。启用受保护数据前必须配置强随机 `ACCESS_CONTEXT_HMAC_SECRET`，并由可信网关签发短期访问上下文；不要把 tenant、role 或 group 放进用户请求正文当作授权依据。
+至少配置模型服务、BGE-M3 / reranker 路径、Milvus、Neo4j、MongoDB 和 MinIO。生产生命周期还必须配置 `LIFECYCLE_DATABASE_URL`、强随机 `LIFECYCLE_ADMIN_TOKEN` 和 secret reference；空 DSN 的 SQLite 模式只用于本地开发。启用受保护数据前必须配置强随机 `ACCESS_CONTEXT_HMAC_SECRET`，并由可信网关签发短期访问上下文；不要把 tenant、role 或 group 放进用户请求正文当作授权依据。
 
 所有检索、融合、校准、拒答、Web、预算和安全参数集中在 `knowledge/processor/query_process/config.py`，通过环境变量覆盖；模型价格集中在 `config/model_pricing.json`，不硬编码在节点逻辑中。
 
@@ -143,7 +143,13 @@ Copy-Item knowledge\.env.example knowledge\.env
 
 ```powershell
 python -m knowledge.main
+python -m knowledge.lifecycle.runtime scheduler
+python -m knowledge.lifecycle.runtime worker
 ```
+
+生产建议至少运行两个 worker；它们通过 PostgreSQL 行锁队列协作，同一 source 不会被并发处理。
+
+企业生产主方案见 [分布式生产部署指南](docs/DISTRIBUTED_PRODUCTION_DEPLOYMENT.md)：多可用区 Kubernetes、API HPA、PostgreSQL leader lock 双 scheduler、KEDA worker、Redis 跨 Pod 状态/SSE、PDB、拓扑分散和 NetworkPolicy。没有现成集群时，可使用 [ACK Pro 三可用区 Terraform](deploy/terraform/alicloud-ack/README.md) 创建受管生产集群；已有三台 Linux 机器时，也可使用 [零新增云账单的三节点 K3s](deploy/k3s-ha/README.md) 做长期验证和小流量试运行。只有一台大内存 Windows 电脑时，可使用 [本机三虚拟机 K3s 验收集群](deploy/k3s-vagrant/README.md) 免费完成生产同构验收，但它不具备物理故障域隔离。单机 Compose 已降级为本地/边缘/灾备演练入口，见 [单机部署说明](docs/PRODUCTION_DEPLOYMENT.md)。
 
 可访问：
 
@@ -165,6 +171,8 @@ python -m knowledge.main
 | DELETE | `/history/{session_id}` | 清空当前授权主体的会话历史 |
 | GET | `/health` | Liveness |
 | GET | `/api/system` | 不含密钥的能力与配置概览 |
+| GET | `/metrics` | 生命周期 Prometheus 指标 |
+| * | `/api/lifecycle/admin/*` | 需 `X-Lifecycle-Admin-Token` 的 Source/Task/Release 运维接口 |
 
 回答会返回结构化 `sources`、`images` 和 `diagnostics`。retrieval trace 保存每一路候选、融合与重排变化、过滤原因、拒答特征和最终证据，但不保存完整 Prompt、密钥或未经截断的敏感内容。
 
@@ -174,6 +182,8 @@ python -m knowledge.main
 .\knowledge\.venv\Scripts\python.exe -m unittest discover -s tests -v
 .\knowledge\.venv\Scripts\python.exe -m compileall -q -x "\.venv|import_temp_Dir|__pycache__" knowledge tests scripts
 .\knowledge\.venv\Scripts\python.exe scripts\run_evaluation.py --provider contract --output evaluation\results\contract.json
+.\knowledge\.venv\Scripts\python.exe scripts\run_postgres_lifecycle_acceptance.py
+.\knowledge\.venv\Scripts\python.exe scripts\run_production_storage_acceptance.py
 ```
 
 契约评测不产生外部费用，也不声称测得真实召回率。真实门禁需要连接模型、Milvus、Neo4j、MongoDB 和 Web，并使用版本化 source contract、control baseline 与 `evaluation/gate.json`。数据集、历史报告和门禁纪律见 [evaluation/README.md](evaluation/README.md)。

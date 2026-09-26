@@ -1,0 +1,23 @@
+{
+  "schema_version": "knowledge-lifecycle-release-v1",
+  "release_id": "stage3-knowledge-lifecycle-v0.1.0",
+  "promotion_eligible": true,
+  "reason": "Stage-3 lifecycle drills pass and the frozen stage-2 full service quality gate passes 12/12 with the protected query fingerprint unchanged.",
+  "bootstrap_active": {
+    "chunk_collection": "kb_chunks_ir_stage2_release_20260925",
+    "entity_collection": "kb_graph_entities_stage2_release_20260925",
+    "graph_version": "stage2-acl-kg-release-20260925",
+    "object_asset_namespace": "stage2-release-20260925"
+  },
+  "rollback": {
+    "chunk_collection": "kb_chunks_ir_stage2_release_control_20260925",
+    "entity_collection": "kb_graph_entities_stage2_release_20260925",
+    "graph_version": "stage2-acl-kg-release-20260925"
+  },
+  "evidence": {
+    "fault_acceptance": "output/stage3-lifecycle-acceptance.20260925t153140z.json",
+    "automated_tests": "250 passed, 66 subtests passed",
+    "stage2_replay": "evaluation/results/stage3-lifecycle-stage2-replay-regression.20260925.json",
+    "stage2_service": "evaluation/results/stage3-lifecycle-stage2-service-regression-final.20260925.json"
+  }
+}

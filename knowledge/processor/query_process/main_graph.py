@@ -21,6 +21,7 @@ from knowledge.processor.query_process.nodes import (
     WebSearchMcpNode,
 )
 from knowledge.processor.query_process.state import QueryGraphState, create_default_state
+from knowledge.processor.query_process.config import QueryConfig
 
 
 try:
@@ -45,22 +46,22 @@ def route_after_policy(state: QueryGraphState) -> str:
     return "item_name_confirm"
 
 
-def create_query_graph():
+def create_query_graph(config: QueryConfig | None = None):
     workflow = StateGraph(QueryGraphState)  # type: ignore[arg-type]
 
     nodes = {
-        "intent_policy": IntentPolicyNode(),
-        "item_name_confirm": ItemNameConfirmNode(),
-        "retrieval_plan": RetrievalPlanNode(),
+        "intent_policy": IntentPolicyNode(config),
+        "item_name_confirm": ItemNameConfirmNode(config),
+        "retrieval_plan": RetrievalPlanNode(config),
         "multi_search": lambda state: state,
-        "search_embedding": SearchEmbeddingNode(),
-        "search_embedding_hyde": SearchEmbeddingHydeNode(),
-        "query_kg": QueryKgNode(),
-        "web_search_mcp": WebSearchMcpNode(),
+        "search_embedding": SearchEmbeddingNode(config),
+        "search_embedding_hyde": SearchEmbeddingHydeNode(config),
+        "query_kg": QueryKgNode(config),
+        "web_search_mcp": WebSearchMcpNode(config),
         "join": lambda state: state,
-        "rrf": RrfNode(),
-        "rerank": RerankNode(),
-        "answer_output": AnswerOutputNode(),
+        "rrf": RrfNode(config),
+        "rerank": RerankNode(config),
+        "answer_output": AnswerOutputNode(config),
     }
 
     for name, node in nodes.items():
@@ -158,6 +159,7 @@ def run_query(
     is_stream: bool = False,
     task_id: str = "",
     access_context: dict[str, Any] | None = None,
+    config: QueryConfig | None = None,
 ) -> dict:
     initial_state = create_default_state(
         task_id=task_id,
@@ -169,7 +171,8 @@ def run_query(
     )
 
     final_state = None
-    for event in query_app.stream(initial_state):
+    app = query_app if config is None else create_query_graph(config)
+    for event in app.stream(initial_state):
         for node_name, node_state in event.items():
             print(
                 f"{node_name} summary: "

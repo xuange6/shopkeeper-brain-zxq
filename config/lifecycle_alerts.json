@@ -1,0 +1,31 @@
+{
+  "schema_version": "lifecycle-alerts-v1",
+  "slos": {
+    "acl_revocation_seconds": 30,
+    "deletion_propagation_seconds": 60,
+    "incremental_sync_lag_seconds": 300,
+    "worker_recovery_seconds": 15,
+    "release_switch_seconds": 10,
+    "rollback_recovery_seconds": 30,
+    "maximum_retry_window_seconds": 900,
+    "orphan_detection_interval_seconds": 900
+  },
+  "alerts": {
+    "source_sync_failure_rate": {"warning": 0.02, "critical": 0.05, "window_minutes": 15},
+    "oldest_task_age_seconds": {"warning": 300, "critical": 900},
+    "dead_letter_total_delta": {"warning": 1, "critical": 5, "window_minutes": 15},
+    "acl_sync_lag_seconds": {"warning": 15, "critical": 30},
+    "deletion_propagation_lag_seconds": {"warning": 30, "critical": 60},
+    "orphan_record_count": {"warning": 1, "critical": 10},
+    "active_release_health": {"critical_below": 1},
+    "dependency_failure_rate": {"warning": 0.02, "critical": 0.05, "window_minutes": 5}
+  },
+  "automatic_release_guard": {
+    "minimum_samples": 50,
+    "consecutive_windows": 2,
+    "required_distinct_signals_for_rollback": 2,
+    "cooldown_seconds": 900,
+    "manual_hold_supported": true,
+    "single_llm_result_can_rollback": false
+  }
+}

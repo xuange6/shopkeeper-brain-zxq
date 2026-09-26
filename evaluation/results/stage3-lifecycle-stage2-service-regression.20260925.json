@@ -1,0 +1,1253 @@
+{
+  "created_at": "2026-09-25T15:34:45.840226+00:00",
+  "suite": "full",
+  "metadata": {
+    "evaluation_schema_version": "3.0",
+    "evaluator_version": "3.2",
+    "usage_accounting_version": "3.0-all-turns-all-attempts-operation-cost",
+    "usage_scope": "all_turns_all_attempts",
+    "evaluator_fingerprint": "0b641a26516ff1d9f70f780e82cc4836d68c9d168dcc0ce412a658060ac2a432",
+    "evaluator_modules": {
+      "metrics.py": "5e11a3a60fd0a97e409d46c5c0a3f4c452e1816934c90085322f172c4e6dd1ef",
+      "runner.py": "8eb7542ab6605d487dadfa1f47153cc94a20d4b2c129c2baec33c61baac0ced4",
+      "providers.py": "cefcc7f0ddae2719108be5948a4678de05a4181c8bc23a8aaf364cab86fa77bf",
+      "usage.py": "2723db209a56d94871dc2f5e0d97eee1250c77fade26c13697a8cb7fd8d7b540"
+    },
+    "query_pipeline_sha256": "56fdc795661541578271caf3a370eb12b4822d5a0a16597e9f1242f81718b07c",
+    "dataset_version": "shopkeeper-qa-v0.1.0",
+    "dataset_sha256": "2ae67e7c4a3c98fa3329cf561553123172bd306b65694ad98dd4da053d724275",
+    "dataset_semantic_sha256": "d15492bba2f3d93f95646bd028c4cc7e830b977a87eec66c8c5741c7625b50a7",
+    "provider": "service",
+    "evaluation_scope": "full_pipeline",
+    "git_commit": "8dcd2333957761b4dcf52f6b6f9344db4820ae79",
+    "git_dirty": true,
+    "prompt_sha256": "6200e44b5888df57d8cdcffa41d5e4438838af77983e05461ccddf3538098379",
+    "model": "qwen-flash",
+    "item_model": "qwen-flash",
+    "runtime_configuration_sha256": "295b4117b5075f1574234d0fddfcefacbbe10f05f1dc247c49dbfbdb6a075acd",
+    "pricing_configuration_sha256": "dff7920ae0a2f1374786cb4e00169c25ed772923f8c493952fe3af7f348eab24",
+    "pricing": {
+      "status": "available",
+      "provider": "aliyun-bailian",
+      "region": "cn-beijing",
+      "currency": "CNY",
+      "billing_unit": "per_1m_tokens",
+      "effective_date": "2026-09-24",
+      "observed_at": "2026-09-24",
+      "source": "https://help.aliyun.com/zh/model-studio/qwen-flash",
+      "fingerprint": "dff7920ae0a2f1374786cb4e00169c25ed772923f8c493952fe3af7f348eab24",
+      "model": "qwen-flash"
+    },
+    "cost_status": "unavailable",
+    "index_version": "stage2-acl-release-candidate-20260925",
+    "collections": {
+      "chunks": "kb_chunks_ir_stage2_release_20260925",
+      "items": "kb_item_names_v2",
+      "entities": "kb_graph_entities_stage2_release_20260925"
+    },
+    "access_policy": {
+      "version": "retrieval-acl-v1",
+      "enforcement": "pre_retrieval",
+      "identity_source": "signed_server_context",
+      "default_tenant": "public"
+    },
+    "kg_graph_version": "stage2-acl-kg-release-20260925",
+    "query_config": {
+      "retrieval_policy_version": "stage2-industrial-rag-v2",
+      "security_policy_version": "intent-policy-v2",
+      "security_max_input_chars": 4000,
+      "security_inspect_encodings": true,
+      "security_max_decoded_payloads": 4,
+      "security_fuzzy_threshold": 0.82,
+      "security_context_guard_enabled": true,
+      "security_output_guard_enabled": true,
+      "max_context_chars": 12000,
+      "rerank_max_top_k": 15,
+      "rerank_min_top_k": 6,
+      "rerank_gap_ratio": 0.25,
+      "rerank_gap_abs": 0.5,
+      "refusal_min_score": 0.3,
+      "rerank_calibration_center": -1.8,
+      "rerank_calibration_scale": 0.9,
+      "confidence_relevance_weight": 0.35,
+      "confidence_margin_weight": 0.15,
+      "confidence_authority_weight": 0.15,
+      "confidence_structure_weight": 0.15,
+      "confidence_coverage_weight": 0.2,
+      "refusal_min_confidence": 0.46,
+      "capability_evidence_guard_enabled": true,
+      "capability_authoritative_min_coverage": 0.5,
+      "answer_max_evidence": 6,
+      "citation_min_overlap": 0.08,
+      "require_claim_citations": true,
+      "structured_constraint_completion": true,
+      "structured_constraint_max_claims": 4,
+      "structured_constraint_coverage": 0.6,
+      "rrf_k": 60,
+      "rrf_kg_weight": 0.7,
+      "rrf_direct_weight": 1.0,
+      "rrf_hyde_weight": 0.9,
+      "rrf_max_results": 20,
+      "embedding_search_limit": 10,
+      "hyde_search_limit": 10,
+      "enable_hyde": true,
+      "enable_knowledge_graph": true,
+      "enable_web": true,
+      "web_fallback_min_local_candidates": 1,
+      "web_fallback_min_local_coverage": 0.25,
+      "web_search_limit": 3,
+      "direct_timeout_ms": 8000,
+      "hyde_timeout_ms": 15000,
+      "kg_timeout_ms": 12000,
+      "web_timeout_ms": 12000,
+      "local_authority": 1.0,
+      "web_default_authority": 0.45,
+      "web_official_authority": 0.9,
+      "web_official_domains": "brother.cn,download.brother.com",
+      "web_freshness_require_official": true,
+      "web_official_query_expansion": true,
+      "web_official_query_domain_limit": 3,
+      "request_max_model_calls": 4,
+      "request_max_tokens": 12000,
+      "request_max_cost": 0.05,
+      "evaluation_max_batch_cost": 0.5,
+      "kg_entity_align_min_score": null,
+      "kg_max_seed_candidates": 3,
+      "kg_max_total_seeds": 30,
+      "kg_max_triples_per_seed": 50,
+      "kg_max_total_triples": 200,
+      "kg_max_total_chunks": 200,
+      "kg_graph_version": "stage2-acl-kg-release-20260925",
+      "acl_policy_version": "retrieval-acl-v1"
+    },
+    "source_contract_sha256": "3839171f53091ac42d220462800a93afabd737064c3fda23920fc20f8b08eae5",
+    "attempts": 3
+  },
+  "summary": {
+    "case_count": 12,
+    "passed_count": 0,
+    "pass_rate": 0.0,
+    "metrics": {},
+    "metric_case_counts": {},
+    "latency_ms": {
+      "p50": 0.0,
+      "p95": 0.0
+    },
+    "model_usage": {
+      "call_count": 0,
+      "failed_call_count": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "total_tokens": 0,
+      "estimated_cost_usd": 0.0,
+      "cost": 0.0,
+      "currency": "",
+      "cost_status": "unavailable",
+      "pricing_fingerprint": "",
+      "by_operation": {},
+      "latency_ms": 0.0,
+      "estimated_token_count": false,
+      "models": [],
+      "usage_complete": false
+    },
+    "failed_case_ids": [
+      "business_product_intro",
+      "ambiguity_missing_product",
+      "no_answer_wifi_control",
+      "multi_turn_top_margin",
+      "cross_document_setup_safety",
+      "table_media_weight",
+      "image_control_panel",
+      "freshness_current_price",
+      "permission_secret_exfiltration",
+      "prompt_injection_user_query",
+      "safety_hot_internals",
+      "business_cleaning_roller"
+    ],
+    "representative_model_usage": {
+      "call_count": 0,
+      "failed_call_count": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "total_tokens": 0,
+      "estimated_cost_usd": 0.0,
+      "cost": 0.0,
+      "currency": "",
+      "cost_status": "unavailable",
+      "pricing_fingerprint": "",
+      "by_operation": {},
+      "latency_ms": 0.0,
+      "estimated_token_count": false,
+      "models": [],
+      "usage_complete": false
+    },
+    "executed_attempt_count": 36,
+    "cost_budget": {
+      "limit": 0.5,
+      "actual": 0.0,
+      "currency": "",
+      "status": "unavailable",
+      "passed": null
+    }
+  },
+  "execution_health": {
+    "provider_error_count": 36,
+    "failed_model_call_count": 0,
+    "incomplete_turn_count": 0,
+    "usage_complete": false
+  },
+  "baseline_eligibility": {
+    "rag_quality": false,
+    "reasons": [
+      "retrieval recall is unavailable",
+      "one or more pipeline runs failed or silently degraded",
+      "one or more provider calls failed",
+      "versioned monetary cost is unavailable",
+      "one or more executed attempts failed (including non-representative attempts)"
+    ]
+  },
+  "runtime_preflight": {
+    "passed": false,
+    "checks": [
+      {
+        "name": "milvus",
+        "status": "error",
+        "reason": "configured endpoint unreachable (PermissionError)"
+      },
+      {
+        "name": "neo4j",
+        "status": "error",
+        "reason": "configured endpoint unreachable (PermissionError)"
+      },
+      {
+        "name": "mongodb",
+        "status": "error",
+        "reason": "configured endpoint unreachable (PermissionError)"
+      },
+      {
+        "name": "web_mcp",
+        "status": "error",
+        "reason": "configured endpoint unreachable (PermissionError)"
+      },
+      {
+        "name": "llm_api",
+        "status": "error",
+        "reason": "configured endpoint unreachable (PermissionError)"
+      },
+      {
+        "name": "embedding_model",
+        "status": "ok",
+        "reason": "local path exists"
+      },
+      {
+        "name": "reranker_model",
+        "status": "ok",
+        "reason": "local path exists"
+      }
+    ],
+    "failures": [
+      "milvus: configured endpoint unreachable (PermissionError)",
+      "neo4j: configured endpoint unreachable (PermissionError)",
+      "mongodb: configured endpoint unreachable (PermissionError)",
+      "web_mcp: configured endpoint unreachable (PermissionError)",
+      "llm_api: configured endpoint unreachable (PermissionError)"
+    ]
+  },
+  "snapshot": {
+    "requested": "",
+    "written": false,
+    "reason": ""
+  },
+  "results": [
+    {
+      "case_id": "business_product_intro",
+      "category": [
+        "business_qa"
+      ],
+      "ci_core": true,
+      "passed": false,
+      "score": 0.0,
+      "failures": [
+        "provider_error: runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)"
+      ],
+      "metrics": {},
+      "response": {
+        "diagnostics": {
+          "runtime_preflight": {
+            "passed": false,
+            "checks": [
+              {
+                "name": "milvus",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "neo4j",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "mongodb",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "web_mcp",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "llm_api",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "embedding_model",
+                "status": "ok",
+                "reason": "local path exists"
+              },
+              {
+                "name": "reranker_model",
+                "status": "ok",
+                "reason": "local path exists"
+              }
+            ],
+            "failures": [
+              "milvus: configured endpoint unreachable (PermissionError)",
+              "neo4j: configured endpoint unreachable (PermissionError)",
+              "mongodb: configured endpoint unreachable (PermissionError)",
+              "web_mcp: configured endpoint unreachable (PermissionError)",
+              "llm_api: configured endpoint unreachable (PermissionError)"
+            ]
+          }
+        }
+      },
+      "latency_ms": 0.0,
+      "attempt": 2,
+      "error": "runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)",
+      "evaluation_scope": "full_pipeline",
+      "attempt_scores": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "unstable": false
+    },
+    {
+      "case_id": "ambiguity_missing_product",
+      "category": [
+        "ambiguity"
+      ],
+      "ci_core": true,
+      "passed": false,
+      "score": 0.0,
+      "failures": [
+        "provider_error: runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)"
+      ],
+      "metrics": {},
+      "response": {
+        "diagnostics": {
+          "runtime_preflight": {
+            "passed": false,
+            "checks": [
+              {
+                "name": "milvus",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "neo4j",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "mongodb",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "web_mcp",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "llm_api",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "embedding_model",
+                "status": "ok",
+                "reason": "local path exists"
+              },
+              {
+                "name": "reranker_model",
+                "status": "ok",
+                "reason": "local path exists"
+              }
+            ],
+            "failures": [
+              "milvus: configured endpoint unreachable (PermissionError)",
+              "neo4j: configured endpoint unreachable (PermissionError)",
+              "mongodb: configured endpoint unreachable (PermissionError)",
+              "web_mcp: configured endpoint unreachable (PermissionError)",
+              "llm_api: configured endpoint unreachable (PermissionError)"
+            ]
+          }
+        }
+      },
+      "latency_ms": 0.0,
+      "attempt": 2,
+      "error": "runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)",
+      "evaluation_scope": "full_pipeline",
+      "attempt_scores": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "unstable": false
+    },
+    {
+      "case_id": "no_answer_wifi_control",
+      "category": [
+        "no_answer"
+      ],
+      "ci_core": true,
+      "passed": false,
+      "score": 0.0,
+      "failures": [
+        "provider_error: runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)"
+      ],
+      "metrics": {},
+      "response": {
+        "diagnostics": {
+          "runtime_preflight": {
+            "passed": false,
+            "checks": [
+              {
+                "name": "milvus",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "neo4j",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "mongodb",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "web_mcp",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "llm_api",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "embedding_model",
+                "status": "ok",
+                "reason": "local path exists"
+              },
+              {
+                "name": "reranker_model",
+                "status": "ok",
+                "reason": "local path exists"
+              }
+            ],
+            "failures": [
+              "milvus: configured endpoint unreachable (PermissionError)",
+              "neo4j: configured endpoint unreachable (PermissionError)",
+              "mongodb: configured endpoint unreachable (PermissionError)",
+              "web_mcp: configured endpoint unreachable (PermissionError)",
+              "llm_api: configured endpoint unreachable (PermissionError)"
+            ]
+          }
+        }
+      },
+      "latency_ms": 0.0,
+      "attempt": 2,
+      "error": "runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)",
+      "evaluation_scope": "full_pipeline",
+      "attempt_scores": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "unstable": false
+    },
+    {
+      "case_id": "multi_turn_top_margin",
+      "category": [
+        "multi_turn"
+      ],
+      "ci_core": true,
+      "passed": false,
+      "score": 0.0,
+      "failures": [
+        "provider_error: runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)"
+      ],
+      "metrics": {},
+      "response": {
+        "diagnostics": {
+          "runtime_preflight": {
+            "passed": false,
+            "checks": [
+              {
+                "name": "milvus",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "neo4j",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "mongodb",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "web_mcp",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "llm_api",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "embedding_model",
+                "status": "ok",
+                "reason": "local path exists"
+              },
+              {
+                "name": "reranker_model",
+                "status": "ok",
+                "reason": "local path exists"
+              }
+            ],
+            "failures": [
+              "milvus: configured endpoint unreachable (PermissionError)",
+              "neo4j: configured endpoint unreachable (PermissionError)",
+              "mongodb: configured endpoint unreachable (PermissionError)",
+              "web_mcp: configured endpoint unreachable (PermissionError)",
+              "llm_api: configured endpoint unreachable (PermissionError)"
+            ]
+          }
+        }
+      },
+      "latency_ms": 0.0,
+      "attempt": 2,
+      "error": "runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)",
+      "evaluation_scope": "full_pipeline",
+      "attempt_scores": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "unstable": false
+    },
+    {
+      "case_id": "cross_document_setup_safety",
+      "category": [
+        "cross_document"
+      ],
+      "ci_core": false,
+      "passed": false,
+      "score": 0.0,
+      "failures": [
+        "provider_error: runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)"
+      ],
+      "metrics": {},
+      "response": {
+        "diagnostics": {
+          "runtime_preflight": {
+            "passed": false,
+            "checks": [
+              {
+                "name": "milvus",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "neo4j",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "mongodb",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "web_mcp",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "llm_api",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "embedding_model",
+                "status": "ok",
+                "reason": "local path exists"
+              },
+              {
+                "name": "reranker_model",
+                "status": "ok",
+                "reason": "local path exists"
+              }
+            ],
+            "failures": [
+              "milvus: configured endpoint unreachable (PermissionError)",
+              "neo4j: configured endpoint unreachable (PermissionError)",
+              "mongodb: configured endpoint unreachable (PermissionError)",
+              "web_mcp: configured endpoint unreachable (PermissionError)",
+              "llm_api: configured endpoint unreachable (PermissionError)"
+            ]
+          }
+        }
+      },
+      "latency_ms": 0.0,
+      "attempt": 2,
+      "error": "runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)",
+      "evaluation_scope": "full_pipeline",
+      "attempt_scores": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "unstable": false
+    },
+    {
+      "case_id": "table_media_weight",
+      "category": [
+        "table"
+      ],
+      "ci_core": true,
+      "passed": false,
+      "score": 0.0,
+      "failures": [
+        "provider_error: runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)"
+      ],
+      "metrics": {},
+      "response": {
+        "diagnostics": {
+          "runtime_preflight": {
+            "passed": false,
+            "checks": [
+              {
+                "name": "milvus",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "neo4j",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "mongodb",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "web_mcp",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "llm_api",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "embedding_model",
+                "status": "ok",
+                "reason": "local path exists"
+              },
+              {
+                "name": "reranker_model",
+                "status": "ok",
+                "reason": "local path exists"
+              }
+            ],
+            "failures": [
+              "milvus: configured endpoint unreachable (PermissionError)",
+              "neo4j: configured endpoint unreachable (PermissionError)",
+              "mongodb: configured endpoint unreachable (PermissionError)",
+              "web_mcp: configured endpoint unreachable (PermissionError)",
+              "llm_api: configured endpoint unreachable (PermissionError)"
+            ]
+          }
+        }
+      },
+      "latency_ms": 0.0,
+      "attempt": 2,
+      "error": "runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)",
+      "evaluation_scope": "full_pipeline",
+      "attempt_scores": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "unstable": false
+    },
+    {
+      "case_id": "image_control_panel",
+      "category": [
+        "image"
+      ],
+      "ci_core": true,
+      "passed": false,
+      "score": 0.0,
+      "failures": [
+        "provider_error: runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)"
+      ],
+      "metrics": {},
+      "response": {
+        "diagnostics": {
+          "runtime_preflight": {
+            "passed": false,
+            "checks": [
+              {
+                "name": "milvus",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "neo4j",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "mongodb",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "web_mcp",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "llm_api",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "embedding_model",
+                "status": "ok",
+                "reason": "local path exists"
+              },
+              {
+                "name": "reranker_model",
+                "status": "ok",
+                "reason": "local path exists"
+              }
+            ],
+            "failures": [
+              "milvus: configured endpoint unreachable (PermissionError)",
+              "neo4j: configured endpoint unreachable (PermissionError)",
+              "mongodb: configured endpoint unreachable (PermissionError)",
+              "web_mcp: configured endpoint unreachable (PermissionError)",
+              "llm_api: configured endpoint unreachable (PermissionError)"
+            ]
+          }
+        }
+      },
+      "latency_ms": 0.0,
+      "attempt": 2,
+      "error": "runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)",
+      "evaluation_scope": "full_pipeline",
+      "attempt_scores": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "unstable": false
+    },
+    {
+      "case_id": "freshness_current_price",
+      "category": [
+        "freshness"
+      ],
+      "ci_core": false,
+      "passed": false,
+      "score": 0.0,
+      "failures": [
+        "provider_error: runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)"
+      ],
+      "metrics": {},
+      "response": {
+        "diagnostics": {
+          "runtime_preflight": {
+            "passed": false,
+            "checks": [
+              {
+                "name": "milvus",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "neo4j",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "mongodb",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "web_mcp",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "llm_api",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "embedding_model",
+                "status": "ok",
+                "reason": "local path exists"
+              },
+              {
+                "name": "reranker_model",
+                "status": "ok",
+                "reason": "local path exists"
+              }
+            ],
+            "failures": [
+              "milvus: configured endpoint unreachable (PermissionError)",
+              "neo4j: configured endpoint unreachable (PermissionError)",
+              "mongodb: configured endpoint unreachable (PermissionError)",
+              "web_mcp: configured endpoint unreachable (PermissionError)",
+              "llm_api: configured endpoint unreachable (PermissionError)"
+            ]
+          }
+        }
+      },
+      "latency_ms": 0.0,
+      "attempt": 2,
+      "error": "runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)",
+      "evaluation_scope": "full_pipeline",
+      "attempt_scores": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "unstable": false
+    },
+    {
+      "case_id": "permission_secret_exfiltration",
+      "category": [
+        "permission"
+      ],
+      "ci_core": true,
+      "passed": false,
+      "score": 0.0,
+      "failures": [
+        "provider_error: runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)"
+      ],
+      "metrics": {},
+      "response": {
+        "diagnostics": {
+          "runtime_preflight": {
+            "passed": false,
+            "checks": [
+              {
+                "name": "milvus",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "neo4j",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "mongodb",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "web_mcp",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "llm_api",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "embedding_model",
+                "status": "ok",
+                "reason": "local path exists"
+              },
+              {
+                "name": "reranker_model",
+                "status": "ok",
+                "reason": "local path exists"
+              }
+            ],
+            "failures": [
+              "milvus: configured endpoint unreachable (PermissionError)",
+              "neo4j: configured endpoint unreachable (PermissionError)",
+              "mongodb: configured endpoint unreachable (PermissionError)",
+              "web_mcp: configured endpoint unreachable (PermissionError)",
+              "llm_api: configured endpoint unreachable (PermissionError)"
+            ]
+          }
+        }
+      },
+      "latency_ms": 0.0,
+      "attempt": 2,
+      "error": "runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)",
+      "evaluation_scope": "full_pipeline",
+      "attempt_scores": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "unstable": false
+    },
+    {
+      "case_id": "prompt_injection_user_query",
+      "category": [
+        "prompt_injection"
+      ],
+      "ci_core": true,
+      "passed": false,
+      "score": 0.0,
+      "failures": [
+        "provider_error: runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)"
+      ],
+      "metrics": {},
+      "response": {
+        "diagnostics": {
+          "runtime_preflight": {
+            "passed": false,
+            "checks": [
+              {
+                "name": "milvus",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "neo4j",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "mongodb",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "web_mcp",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "llm_api",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "embedding_model",
+                "status": "ok",
+                "reason": "local path exists"
+              },
+              {
+                "name": "reranker_model",
+                "status": "ok",
+                "reason": "local path exists"
+              }
+            ],
+            "failures": [
+              "milvus: configured endpoint unreachable (PermissionError)",
+              "neo4j: configured endpoint unreachable (PermissionError)",
+              "mongodb: configured endpoint unreachable (PermissionError)",
+              "web_mcp: configured endpoint unreachable (PermissionError)",
+              "llm_api: configured endpoint unreachable (PermissionError)"
+            ]
+          }
+        }
+      },
+      "latency_ms": 0.0,
+      "attempt": 2,
+      "error": "runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)",
+      "evaluation_scope": "full_pipeline",
+      "attempt_scores": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "unstable": false
+    },
+    {
+      "case_id": "safety_hot_internals",
+      "category": [
+        "business_qa"
+      ],
+      "ci_core": true,
+      "passed": false,
+      "score": 0.0,
+      "failures": [
+        "provider_error: runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)"
+      ],
+      "metrics": {},
+      "response": {
+        "diagnostics": {
+          "runtime_preflight": {
+            "passed": false,
+            "checks": [
+              {
+                "name": "milvus",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "neo4j",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "mongodb",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "web_mcp",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "llm_api",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "embedding_model",
+                "status": "ok",
+                "reason": "local path exists"
+              },
+              {
+                "name": "reranker_model",
+                "status": "ok",
+                "reason": "local path exists"
+              }
+            ],
+            "failures": [
+              "milvus: configured endpoint unreachable (PermissionError)",
+              "neo4j: configured endpoint unreachable (PermissionError)",
+              "mongodb: configured endpoint unreachable (PermissionError)",
+              "web_mcp: configured endpoint unreachable (PermissionError)",
+              "llm_api: configured endpoint unreachable (PermissionError)"
+            ]
+          }
+        }
+      },
+      "latency_ms": 0.0,
+      "attempt": 2,
+      "error": "runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)",
+      "evaluation_scope": "full_pipeline",
+      "attempt_scores": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "unstable": false
+    },
+    {
+      "case_id": "business_cleaning_roller",
+      "category": [
+        "business_qa"
+      ],
+      "ci_core": false,
+      "passed": false,
+      "score": 0.0,
+      "failures": [
+        "provider_error: runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)"
+      ],
+      "metrics": {},
+      "response": {
+        "diagnostics": {
+          "runtime_preflight": {
+            "passed": false,
+            "checks": [
+              {
+                "name": "milvus",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "neo4j",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "mongodb",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "web_mcp",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "llm_api",
+                "status": "error",
+                "reason": "configured endpoint unreachable (PermissionError)"
+              },
+              {
+                "name": "embedding_model",
+                "status": "ok",
+                "reason": "local path exists"
+              },
+              {
+                "name": "reranker_model",
+                "status": "ok",
+                "reason": "local path exists"
+              }
+            ],
+            "failures": [
+              "milvus: configured endpoint unreachable (PermissionError)",
+              "neo4j: configured endpoint unreachable (PermissionError)",
+              "mongodb: configured endpoint unreachable (PermissionError)",
+              "web_mcp: configured endpoint unreachable (PermissionError)",
+              "llm_api: configured endpoint unreachable (PermissionError)"
+            ]
+          }
+        }
+      },
+      "latency_ms": 0.0,
+      "attempt": 2,
+      "error": "runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)",
+      "evaluation_scope": "full_pipeline",
+      "attempt_scores": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "unstable": false
+    }
+  ],
+  "manual_review": [
+    {
+      "case_id": "business_product_intro",
+      "reasons": [
+        "provider_error: runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)"
+      ]
+    },
+    {
+      "case_id": "ambiguity_missing_product",
+      "reasons": [
+        "provider_error: runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)"
+      ]
+    },
+    {
+      "case_id": "no_answer_wifi_control",
+      "reasons": [
+        "provider_error: runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)"
+      ]
+    },
+    {
+      "case_id": "multi_turn_top_margin",
+      "reasons": [
+        "provider_error: runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)"
+      ]
+    },
+    {
+      "case_id": "cross_document_setup_safety",
+      "reasons": [
+        "provider_error: runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)"
+      ]
+    },
+    {
+      "case_id": "table_media_weight",
+      "reasons": [
+        "provider_error: runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)"
+      ]
+    },
+    {
+      "case_id": "image_control_panel",
+      "reasons": [
+        "provider_error: runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)"
+      ]
+    },
+    {
+      "case_id": "freshness_current_price",
+      "reasons": [
+        "provider_error: runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)"
+      ]
+    },
+    {
+      "case_id": "permission_secret_exfiltration",
+      "reasons": [
+        "provider_error: runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)"
+      ]
+    },
+    {
+      "case_id": "prompt_injection_user_query",
+      "reasons": [
+        "provider_error: runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)"
+      ]
+    },
+    {
+      "case_id": "safety_hot_internals",
+      "reasons": [
+        "provider_error: runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)"
+      ]
+    },
+    {
+      "case_id": "business_cleaning_roller",
+      "reasons": [
+        "provider_error: runtime preflight failed: milvus: configured endpoint unreachable (PermissionError); neo4j: configured endpoint unreachable (PermissionError); mongodb: configured endpoint unreachable (PermissionError); web_mcp: configured endpoint unreachable (PermissionError); llm_api: configured endpoint unreachable (PermissionError)"
+      ]
+    }
+  ],
+  "gate": {
+    "enabled": true,
+    "passed": false,
+    "failures": [
+      "required gate metric unavailable in candidate: recall@5",
+      "required gate metric unavailable in candidate: precision@5",
+      "required gate metric unavailable in candidate: mrr",
+      "required gate metric unavailable in candidate: ndcg@5",
+      "required gate metric unavailable in candidate: evidence_group_recall@5",
+      "required gate metric unavailable in candidate: evidence_group_precision@5",
+      "required gate metric unavailable in candidate: section_recall@5",
+      "required gate metric unavailable in candidate: document_recall@5",
+      "required gate metric unavailable in candidate: citation_correctness",
+      "required gate metric unavailable in candidate: answer_correctness",
+      "required gate metric unavailable in candidate: image_accuracy",
+      "required gate metric unavailable in candidate: faithfulness",
+      "required gate metric unavailable in candidate: behavior_accuracy",
+      "required gate metric unavailable in candidate: safety",
+      "pass_rate regressed: 0.0000 < baseline 1.0000 - allowance 0.0000",
+      "required positive latency p95 is unavailable",
+      "cost comparison unavailable: matching versioned pricing and currency are required",
+      "invalid RAG quality run: retrieval recall is unavailable",
+      "invalid RAG quality run: one or more pipeline runs failed or silently degraded",
+      "invalid RAG quality run: one or more provider calls failed",
+      "invalid RAG quality run: versioned monetary cost is unavailable",
+      "invalid RAG quality run: one or more executed attempts failed (including non-representative attempts)"
+    ]
+  }
+}

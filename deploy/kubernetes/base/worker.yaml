@@ -1,0 +1,128 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shopkeeper-lifecycle-worker
+spec:
+  replicas: 3
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: shopkeeper-lifecycle-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: shopkeeper-lifecycle-worker
+    spec:
+      serviceAccountName: shopkeeper-brain
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 180
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: shopkeeper-lifecycle-worker
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: shopkeeper-lifecycle-worker
+      initContainers:
+        - name: migrate-control-plane
+          image: shopkeeper-brain
+          command: ["python", "-m", "knowledge.lifecycle.runtime", "migrate"]
+          env:
+            - name: LIFECYCLE_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: shopkeeper-runtime
+                  key: LIFECYCLE_MIGRATION_DATABASE_URL
+          envFrom:
+            - configMapRef:
+                name: shopkeeper-runtime
+            - secretRef:
+                name: shopkeeper-runtime
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+      containers:
+        - name: worker
+          image: shopkeeper-brain
+          command: ["python", "-m", "knowledge.lifecycle.runtime", "worker"]
+          env:
+            - name: LIFECYCLE_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: shopkeeper-runtime
+                  key: LIFECYCLE_DATABASE_URL
+            - name: LIFECYCLE_WORKER_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          envFrom:
+            - configMapRef:
+                name: shopkeeper-runtime
+            - secretRef:
+                name: shopkeeper-runtime
+          resources:
+            requests:
+              cpu: "2"
+              memory: 6Gi
+            limits:
+              cpu: "8"
+              memory: 16Gi
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,time,sys; p=os.environ['LIFECYCLE_RUNTIME_HEARTBEAT_PATH']; sys.exit(0 if os.path.isfile(p) and time.time()-os.path.getmtime(p)<120 else 1)"
+            initialDelaySeconds: 45
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: runtime
+              mountPath: /var/lib/shopkeeper
+            - name: models
+              mountPath: /models
+              readOnly: true
+            - name: sources
+              mountPath: /data/sources
+              readOnly: true
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 8Gi
+        - name: runtime
+          emptyDir:
+            sizeLimit: 4Gi
+        - name: models
+          persistentVolumeClaim:
+            claimName: shopkeeper-models
+        - name: sources
+          persistentVolumeClaim:
+            claimName: shopkeeper-sources

@@ -1,0 +1,18 @@
+{
+  "claimed_sources": [
+    "pg-accept-8598b6c444-a",
+    "pg-accept-8598b6c444-b"
+  ],
+  "concurrent_claims": 2,
+  "created_tasks": 3,
+  "database": "postgresql",
+  "metrics_available": true,
+  "same_source_exclusion": true,
+  "scheduler_failover": true,
+  "scheduler_single_leader": true,
+  "schema_versions": [
+    "0001_stage3_lifecycle",
+    "0002_source_task_exclusion"
+  ],
+  "status": "passed"
+}

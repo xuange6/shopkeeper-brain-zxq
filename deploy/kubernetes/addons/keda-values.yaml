@@ -1,0 +1,28 @@
+operator:
+  replicaCount: 2
+
+metricsServer:
+  replicaCount: 2
+
+webhooks:
+  replicaCount: 2
+
+podDisruptionBudget:
+  operator:
+    minAvailable: 1
+  metricServer:
+    minAvailable: 1
+  webhooks:
+    minAvailable: 1
+
+logging:
+  operator:
+    format: json
+  webhooks:
+    format: json
+
+prometheus:
+  operator:
+    enabled: true
+  metricServer:
+    enabled: true

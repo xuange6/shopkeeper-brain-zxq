@@ -1,0 +1,11 @@
+# Create these resources once through the Alibaba Cloud console or a separate
+# bootstrap stack. Copy this file to backend.hcl; never add credentials here.
+bucket                   = "replace-with-private-versioned-oss-bucket"
+prefix                   = "shopkeeper-brain/production"
+key                      = "ack.tfstate"
+region                   = "cn-shanghai"
+encrypt                  = true
+acl                      = "private"
+tablestore_endpoint      = "https://replace-with-instance.cn-shanghai.ots.aliyuncs.com"
+tablestore_instance_name = "replace-with-tablestore-instance"
+tablestore_table         = "terraform_state_lock"

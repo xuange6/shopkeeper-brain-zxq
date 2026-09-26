@@ -33,9 +33,24 @@ dist/
 *.egg-info/
 logs/
 *.log
-evaluation/results/
-/output/
+/evaluation/results/*
+/output/*
+!/evaluation/results/stage3-lifecycle*.json
+!/evaluation/results/stage3-lifecycle*.md
+!/output/stage3-lifecycle-acceptance.20260925t152914z.json
+!/output/stage3-lifecycle-acceptance.20260925t153140z.json
+!/output/stage3-lifecycle-acceptance.20260926t064537z.json
+!/output/stage3-postgres-acceptance.20260926.json
+!/output/stage3-production-storage-acceptance.20260926.json
+!/output/stage3-distributed-runtime-acceptance.20260926.json
+!/output/stage3-postgres-distributed-acceptance.20260926.json
+!/output/stage3-k3s-vagrant-ha.20260926.json
 /tmp/
+/deploy/.env.production
+/deploy/secrets/*.txt
+/deploy/data/
+!/deploy/.env.production.example
+!/deploy/secrets/README.md
 # Local Stage-1 service transcripts and detailed validation records are private.
 /evaluation/snapshots/stage1-*.jsonl
 /evaluation/baselines/STAGE0_SHA_AUDIT.md
@@ -66,3 +81,20 @@ checkpoints/
 *.sqlite
 *.sqlite3
 *.milvus
+
+# Terraform local state, runtime configuration and saved plans
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+**/backend.hcl
+**/terraform.tfvars
+crash.log
+crash.*.log
+
+# K3s machine inventory and locally retrieved admin credentials
+/deploy/k3s-ha/inventory.json
+/deploy/k3s-ha/.secrets/
+/deploy/k3s-vagrant/.vagrant/
+/deploy/k3s-vagrant/.cache/
+*kubeconfig*
